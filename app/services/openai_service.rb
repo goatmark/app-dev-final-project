@@ -2,7 +2,7 @@
 
 class OpenaiService
   def initialize
-    @client = OpenAI::Client.new(access_token: ENV['openai_key'])
+    @client = OpenAI::Client.new
   end
 
   def prompt_classify(message: "", chosen_model:  "gpt-4o")
