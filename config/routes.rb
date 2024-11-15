@@ -4,4 +4,9 @@ Rails.application.routes.draw do
 
   # get "/your_first_screen" => "pages#first"
   
+  get("/", {:controller => "main", :action => "main"})
+
+  get("/processing", {:controller => "main", :action => "processing"})
+
+  post("/submit", {:controller => "main", :action => "submit"})
 end
