@@ -15,7 +15,7 @@ class MainController < ApplicationController
   def processing
     prompt_1 = "On Tuesday, I need to pick up my dry cleaning."
     prompt_2 = "I have an assignment for my Digital Marketing Lab class due on Saturday."
-    prompt_3 = "I need to send a follow up email to Jessica about the cannabis club."
+    prompt_3 = "I need to send a follow up email to Jessica about the club."
     prompt_4 = "I need to go to the banquet next month."
     prompt_5 = "AYO GPT - can you help a m*f* remember that he's gotta fill up a m*f* car with some m*f* gas by Monday?"
 
