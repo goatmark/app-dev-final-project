@@ -19,8 +19,9 @@ class MainController < ApplicationController
     prompt_4 = "I need to go to the banquet next month."
     prompt_5 = "AYO GPT - can you help a m*f* remember that he's gotta fill up a m*f* car with some m*f* gas by Monday?"
     prompt_6 = "I had a long conversation with my Samuel yesterday. I told him my view of the world - that it's in decay, that we're about to face hard times, and that he shouldn't be too picky in choosing a job. It was a harsh but fair conversation."
+    prompt_7 = "I can't believe it. I'm so screwed. I have 10 minutes to do the readings for my Digital Marketing Lab class and I haven't started. I'm so screwed. Oh my god oh my god oh my god. I have 10 minutes to read the entire Google Analytics 4 documentation and get a certification. I'm so screwed HELP ME."
 
-    @chosen_prompt = prompt_3
+    @chosen_prompt = prompt_7
 
     openai_class = OpenaiService.new
 
