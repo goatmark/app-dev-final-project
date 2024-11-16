@@ -67,6 +67,22 @@ class OpenaiService
     return(deadline)
   end
 
+  def prompt_note_title(message: "", chosen_model:  "gpt-4o-mini")
+    response = @client.chat(
+      parameters: {
+        model: chosen_model, 
+        messages: [
+          { role: "system", content: "The message contains the 'body' of a Note to be stored in a database. Return only a proposed 'title' for the note. Do not return anything other than a title without quotes. Keep it salient and descriptive, not poetic."},
+          { role: "user", content: message }
+        ],
+        temperature: 0.7
+      }
+    )
+    # Extract the response text
+    title = response.dig("choices", 0, "message", "content").strip
+    return(title)
+  end
+
   def prompt_note_summary(message: "", chosen_model:  "gpt-4o-mini")
     response = @client.chat(
       parameters: {

@@ -5,27 +5,47 @@ class NotionService
     @client = Notion::Client.new
   end
 
-  def add_note(body, formatted_date)
-    db = ENV.fetch("NOTES_DB_KEY")
+  def add_note(title, body, formatted_date)
+    db_id = ENV.fetch("NOTES_DB_KEY")
     properties = {
-      'Meeting': {
-        'title': [
+      'Meeting' => {
+        'title' => [
           {
-            'text': {
-              'content': body 
+            'text' => {
+              'content' => title
             }
           }
         ]
       },
-      'Date': {
-        'date': {
-          'start': formatted_date
+      'Date' => {
+        'date' => {
+          'start' => formatted_date
         }
       }
     }
+
+    # Define the content of the page as children blocks
+    children = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'text',
+              text: {
+                content: body
+              }
+            }
+          ]
+        }
+      }
+    ]
+
     @client.create_page(
-      parent: { database_id: ENV.fetch("NOTES_DB_KEY")},
-      properties: properties    
+      parent: { database_id: db_id },
+      properties: properties,
+      children: children
     )
 
   end

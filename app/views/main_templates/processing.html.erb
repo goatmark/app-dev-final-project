@@ -10,6 +10,7 @@ For testing, we can consider the following transcriptions:
 <li>"I need to send a follow up email to Jessica about the club."</li>
 <li>"I need to go to the banquet next month."</li>
 <li>"AYO GPT - can you help a m*f* remember that he's gotta fill up a m*f* car with some m*f* gas by Monday?"</li>
+<li>I had a long conversation with my Samuel yesterday. I told him my view of the world - that it's in decay, that we're about to face hard times, and that he shouldn't be too picky in choosing a job. It was a harsh but fair conversation.</li>
 </ol>
 </div>
 
@@ -21,7 +22,9 @@ For testing, we can consider the following transcriptions:
 <h3>Output</h3>
 <div>
 <%if @result == "note"%>
+  <div><b>Note title: </b><%=@title%></div>
   <div><b>Note body: </b><%=@body%></div>
+  <div><b>Note date: </b><%=@todays_date%></div>
 <%elsif @result == "task"%>
   <div><b>Task: </b><%=@task%></div>
   <div><b>Deadline: </b><%=@deadline%></div>
