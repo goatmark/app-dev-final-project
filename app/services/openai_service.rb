@@ -5,6 +5,18 @@ class OpenaiService
     @client = OpenAI::Client.new
   end
 
+  def transcribe_audio(file_path)
+    response = @client.audio.transcribe(
+      parameters: {
+        model: "whisper-1",
+        file: File.open(file_path),
+        response_format: 'text'
+      }
+    )
+
+    response['text']
+  end
+
   def prompt_classify(message: "", chosen_model:  "gpt-4o-mini")
     response = @client.chat(
       parameters: {
