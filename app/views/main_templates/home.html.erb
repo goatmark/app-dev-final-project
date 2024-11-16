@@ -7,6 +7,7 @@
 <audio id="audioPlayback" controls></audio>
 
 <form id="audioForm" action="/submit" method="post" enctype="multipart/form-data">
+  <%= hidden_field_tag :authenticity_token, form_authenticity_token %>>
   <input type="file" id="audioFileInput" name="audio_file" accept="audio/*" style="display: none;">
   <button type="submit">Submit</button>
 </form>
