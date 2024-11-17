@@ -84,7 +84,7 @@ class OpenaiService
       parameters: {
         model: chosen_model, 
         messages: [
-          { role: "system", content: "The message contains the 'body' of a Note to be stored in a database. Return only a proposed 'title' for the note. Do not return anything other than a title without quotes. Keep it salient and descriptive, not poetic."},
+          { role: "system", content: "The message contains the 'body' of a Note to be stored in a database. Return only a proposed 'title' for the note. Do not return anything other than a title without quotes. Keep it concise, salient and descriptive, not poetic. Colons are strictly not allowed."},
           { role: "user", content: message }
         ],
         temperature: 0.7
