@@ -54,6 +54,7 @@ class OpenaiService
           { role: "system", content: "Return only the deadline knowing today is #{dow}, #{todays_date}.
           (e.g. if something says it's due Tuesday, assume it's due the first Tuesday after #{todays_date}).
           If no deadline specified, return #{tomorrows_date}. 
+          If something is to be done 'today', return #{todays_date}.
           If something is due 'next week', assume a 7 day deadline from today. 
           If something is due 'next month', assume a deadline a full calendar month from today.
           Strictly always respond in  'YYYY-MM-DD' format without quotes."},

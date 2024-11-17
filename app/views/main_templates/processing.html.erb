@@ -1,21 +1,32 @@
 <!--app/views/main_templates/processing.html.erb -->
-<h1>Processing</h1>
+<h1>Dictation App: Confirmation</h1>
 
-<h2>Chosen Prompt</h2>
-<%=@note%>
 <hr>
 
 <%if @suppress_api_calls%>
   <div>API calls disabled.</div>
 <%else%>
-  <%if @result == "note"%>
-    <div><b>Note title: </b><%=@title%></div>
-    <div><b>Note body: </b><%=@body%></div>
-    <div><b>Note date: </b><%=@todays_date%></div>
-  <%elsif @result == "task"%>
-    <div><b>Task: </b><%=@task%></div>
-    <div><b>Deadline: </b><%=@deadline%></div>
-  <%else%>
+  <%if @result == "note" || @result == "task"%>
 
+    <%if @result == "note"%>
+      <div><b>Note title: </b><%=@title%></div>
+      <div><b>Note body: </b><%=@body%></div>
+      <div><b>Note date: </b><%=@todays_date%></div>
+    <%elsif @result == "task"%>
+      <div><b>Task: </b><%=@task%></div>
+      <div><b>Deadline: </b><%=@deadline%></div>
+    <%else%>
+    <%end%>
+
+    <hr>
+  
+    <form action="/confirm" method="post">
+      <button>Confirm</button>
+    </form>
+    
+  <%else%>
   <%end%>
 <%end%>
+
+<h2>Chosen Prompt</h2>
+<%=@note%>

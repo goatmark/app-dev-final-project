@@ -9,4 +9,5 @@ Rails.application.routes.draw do
   get("/processing", {:controller => "main", :action => "processing"})
 
   post("/submit", {:controller => "main", :action => "submit"})
+  post("/confirm", {:controller => "main", :action => "confirm"})
 end
