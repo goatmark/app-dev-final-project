@@ -60,8 +60,9 @@ class MainController < ApplicationController
       @title = flash[:title]
       notion_class.add_note(@title, @body, @todays_date)
     elsif @result == "task"
-      flash[:task] = @task
-      flash[:deadline] = @deadline
+      @task = flash[:task]
+      @deadline = flash[:deadline]
+      notion_class.add_task(@task, @deadline)
     else
     end
 

@@ -6,8 +6,8 @@
 
 <form action="/submit" method="post">
   <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
-  <label for="input_box">Notes</label>
-  <textarea id = "input_box" name="input" rows="3"></textarea>
+  <label for="input_box"></label>
+  <textarea id = "input_box" name="input" rows="3" placeholder="Dictation will appear here..." lang="en"></textarea>
 
   <button>Submit</button>
 </form>
