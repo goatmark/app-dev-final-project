@@ -9,7 +9,7 @@ class OpenaiService
     response = @client.audio.transcribe(
       parameters: {
         model: "whisper-1",
-        file: File.open(file_path),
+        file: File.open(file_path, 'rb'),
         response_format: 'text'
       }
     )

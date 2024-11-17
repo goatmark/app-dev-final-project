@@ -7,7 +7,8 @@
 <audio id="audioPlayback" controls></audio>
 
 <form id="audioForm" action="/submit" method="post" enctype="multipart/form-data">
-  <%= hidden_field_tag :authenticity_token, form_authenticity_token %>>
+  <%= csrf_meta_tags %>
+  <label for="audioFileInput"></label>
   <input type="file" id="audioFileInput" name="audio_file" accept="audio/*" style="display: none;">
   <button type="submit">Submit</button>
 </form>
@@ -45,11 +46,22 @@
 
     recordButton.disabled = true;
     stopButton.disabled = false;
+
+    
   });
 
   stopButton.addEventListener('click', () => {
     mediaRecorder.stop();
     recordButton.disabled = false;
     stopButton.disabled = true;
+  });
+
+  const audioForm = document.getElementById('audioForm');
+
+  audioForm.addEventListener('submit', (event) => {
+    if (audioFileInput.files.length === 0) {
+      event.preventDefault();
+      alert('Please record audio before submitting.');
+    }
   });
 </script>
