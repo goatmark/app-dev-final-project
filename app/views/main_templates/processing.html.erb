@@ -21,6 +21,7 @@
     <hr>
   
     <form action="/confirm" method="post">
+      <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
       <button>Confirm</button>
     </form>
     

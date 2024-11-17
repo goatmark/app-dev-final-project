@@ -1,12 +1,13 @@
 # app / controllers / main_controller.rb
 class MainController < ApplicationController
 
+  protect_from_forgery except: :upload_audio
+
   def main
     render({:template => "main_templates/home"})
   end 
 
   def submit
-
     @note = params.fetch("input", "")
     flash[:note] = @note
     
@@ -66,5 +67,26 @@ class MainController < ApplicationController
 
 
     redirect_to("/")
+  end
+
+  def upload_audio
+    audio_file = params[:audio_file]
+
+    if audio_file
+      temp_audio_path = Rails.root.join('tmp', 'uploads', audio_file.original_filename)
+      FileUtils.mkdir_p(File.dirname(temp_audio_path))
+      File.open(temp_audio_path, 'wb') do |file|
+        file.write(audio_file.read)
+      end
+
+      openai_class = OpenaiService.new
+      transcription = openai_class.transcribe_audio(temp_audio_path.to_s)
+
+      File.delete(temp_audio_path) if File.exist?(temp_audio_path)
+
+      render json: { transcription: transcription }
+    else
+      render json: { error: 'No audio file received.' }, status: :unprocessable_entity
+    end
   end
 end

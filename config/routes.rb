@@ -1,3 +1,5 @@
+# config/routes.rb
+
 Rails.application.routes.draw do
 
   # This is a blank app! Pick your first screen, build out the RCAV, and go from there. E.g.:
@@ -10,4 +12,5 @@ Rails.application.routes.draw do
 
   post("/submit", {:controller => "main", :action => "submit"})
   post("/confirm", {:controller => "main", :action => "confirm"})
+  post("/upload_audio", {:controller => "main", :action => "upload_audio"})
 end

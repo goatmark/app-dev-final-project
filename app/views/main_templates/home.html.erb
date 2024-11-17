@@ -1,26 +1,74 @@
 <!--app/views/main_templates/home.html.erb-->
 <h1>Dictation App</h1>
 
+<button id="record-button">Record</button>
+<button id="stop-button" disabled>Stop</button>
+
 <form action="/submit" method="post">
+  <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
   <label for="input_box">Notes</label>
   <textarea id = "input_box" name="input" rows="3"></textarea>
 
   <button>Submit</button>
 </form>
 
-<hr>
 
-<div>
-For testing, we can consider the following transcriptions:
+<script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script>
+<script>
+  let recorder;
+  let stream;
 
-<ol>
-<li>On Tuesday, I need to pick up my dry cleaning.</li>
-<li>I have an assignment for my Digital Marketing Lab class due on Saturday.</li>
-<li>I need to send a follow up email to Jessica about the club.</li>
-<li>I need to go to the banquet next month.</li>
-<li>AYO GPT - can you help a m*f* remember that he's gotta fill up a m*f* car with some m*f* gas by Monday?</li>
-<li>I had a long conversation with my Samuel yesterday. I told him my view of the world - that it's in decay, that we're about to face hard times, and that he shouldn't be too picky in choosing a job. It was a harsh but fair conversation.</li>
-<li>I can't believe it. I'm so screwed. I have 10 minutes to do the readings for my Digital Marketing Lab class and I haven't started. I'm so screwed. Oh my god oh my god oh my god. I have 10 minutes to read the entire Google Analytics 4 documentation and get a certification. I'm so screwed HELP ME.</li>
-<li>This is an example recording. My name is Mark. Hello. Today I need to go shopping for beef tenderloin.</li>
-</ol>
-</div>
+  const recordButton = document.getElementById('record-button');
+  const stopButton = document.getElementById('stop-button');
+  const inputBox = document.getElementById('input_box');
+
+  recordButton.addEventListener('click', async () => {
+    recordButton.disabled = true;
+    stopButton.disabled = false;
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recorder = RecordRTC(stream, { type: 'audio' });
+        recorder.startRecording();
+      } catch (err) {
+        console.error('Error:', err);
+        alert('An error occurred while accessing the microphone.');
+        recordButton.disabled = false;
+        stopButton.disabled = true;
+      }
+    } else {
+      alert('Your browser does not support audio recording.');
+    }
+  });
+
+  stopButton.addEventListener('click', () => {
+    recordButton.disabled = false;
+    stopButton.disabled = true;
+
+    recorder.stopRecording(() => {
+      let blob = recorder.getBlob();
+
+      const formData = new FormData();
+      formData.append('audio_file', blob, 'recording.wav');
+
+      fetch('/upload_audio', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-Token': '<%= form_authenticity_token %>'
+        },
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        inputBox.value = data.transcription;
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred during transcription.');
+      });
+
+      stream.getTracks().forEach(track => track.stop());
+    });
+  });
+</script>
