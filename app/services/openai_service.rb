@@ -68,7 +68,34 @@ class OpenaiService
           If something is to be done 'today', return #{todays_date}.
           If something is due 'next week', assume a 7 day deadline from today. 
           If something is due 'next month', assume a deadline a full calendar month from today.
-          Strictly always respond in  'YYYY-MM-DD' format without quotes."},
+          Strictly always respond in  'YYYY-MM-DD' format without quotes.
+          Assume something to be done 'end of the week' is due Friday."},
+          { role: "user", content: message }
+        ],
+        temperature: 0.7
+      }
+    )
+    # Extract the response text
+    deadline = response.dig("choices", 0, "message", "content").strip
+    return(deadline)
+  end
+
+  def prompt_extract_action_date(message: "", chosen_model:  "gpt-4o-mini")
+    today = Date.today
+    tomorrow = today + 1
+    todays_date=today.strftime('%Y-%m-%d')
+    tomorrows_date=tomorrow.strftime('%Y-%m-%d')
+    response = @client.chat(
+      parameters: {
+        model: chosen_model, 
+        messages: [
+          { role: "system", content: "Today's date is #{todays_date}.
+          If the prompt contains information about a 'reminder', e.g. 'remind me in 2 days,' return only the corresponding date in '%Y-%m-%d' format, or YYYY-MM-DD format.
+          Do not confuse this with the deadline. If a prompt says 'Send out an email in 2 days,' you should return #{todays_date}.
+          If a prompt says 'Remind me tomorrow to send an email in 2 days,' you should return only #{tomorrows_date}.
+          If the prompt does nto contain information about a reminder, return only #{todays_date}.
+          Only ever return a date.
+          Assume something to be done 'end of the week' is due Friday."},
           { role: "user", content: message }
         ],
         temperature: 0.7

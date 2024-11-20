@@ -17,32 +17,28 @@ class MainController < ApplicationController
   def processing
     @note = flash[:note]
 
-    @suppress_api_calls = false
-
     @todays_date = Date.today
     @todays_date = @todays_date.strftime("%Y-%m-%d")
     flash[:todays_date] = @todays_date
     
-    if @suppress_api_calls
-      @result = "API calls disabled, #{@note}"
+    openai_class = OpenaiService.new
+
+    @result = openai_class.prompt_classify(message: @note)
+    flash[:result] = @result
+
+    if @result == "note"
+      @body = openai_class.prompt_note_summary(message: @note)
+      @title = openai_class.prompt_note_title(message: @note)
+      flash[:body] = @body
+      flash[:title] = @title
+    elsif @result == "task"
+      @task = openai_class.prompt_extract_task(message: @note)
+      @action_date = openai_class.prompt_extract_action_date(message: @note)
+      @deadline = openai_class.prompt_extract_deadline(message: @note)
+      flash[:task] = @task
+      flash[:deadline] = @deadline
+      flash[:action_date] = @action_date
     else
-      openai_class = OpenaiService.new
-
-      @result = openai_class.prompt_classify(message: @note)
-      flash[:result] = @result
-
-      if @result == "note"
-        @body = openai_class.prompt_note_summary(message: @note)
-        @title = openai_class.prompt_note_title(message: @note)
-        flash[:body] = @body
-        flash[:title] = @title
-      elsif @result == "task"
-        @task = openai_class.prompt_extract_task(message: @note)
-        @deadline = openai_class.prompt_extract_deadline(message: @note)
-        flash[:task] = @task
-        flash[:deadline] = @deadline
-      else
-      end
     end
 
     render({:template => "main_templates/processing"})
@@ -62,7 +58,8 @@ class MainController < ApplicationController
     elsif @result == "task"
       @task = flash[:task]
       @deadline = flash[:deadline]
-      notion_class.add_task(@task, @deadline)
+      @action_date = flash[:action_date]
+      notion_class.add_task(@task, @deadline, @action_date)
     else
     end
 

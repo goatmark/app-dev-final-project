@@ -3,30 +3,27 @@
 
 <hr>
 
-<%if @suppress_api_calls%>
-  <div>API calls disabled.</div>
-<%else%>
-  <%if @result == "note" || @result == "task"%>
+<%if @result == "note" || @result == "task"%>
 
-    <%if @result == "note"%>
-      <div><b>Note title: </b><%=@title%></div>
-      <div><b>Note body: </b><%=@body%></div>
-      <div><b>Note date: </b><%=@todays_date%></div>
-    <%elsif @result == "task"%>
-      <div><b>Task: </b><%=@task%></div>
-      <div><b>Deadline: </b><%=@deadline%></div>
-    <%else%>
-    <%end%>
-
-    <hr>
-  
-    <form action="/confirm" method="post">
-      <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
-      <button>Confirm</button>
-    </form>
-    
+  <%if @result == "note"%>
+    <div><b>Note title: </b><%=@title%></div>
+    <div><b>Note body: </b><%=@body%></div>
+    <div><b>Note date: </b><%=@todays_date%></div>
+  <%elsif @result == "task"%>
+    <div><b>Task: </b><%=@task%></div>
+    <div><b>Deadline: </b><%=@deadline%></div>
+    <div><b>Action Date: </b><%=@action_date%><div>
   <%else%>
   <%end%>
+
+  <hr>
+
+  <form action="/confirm" method="post">
+    <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+    <button>Confirm</button>
+  </form>
+  
+<%else%>
 <%end%>
 
 <h2>Chosen Prompt</h2>

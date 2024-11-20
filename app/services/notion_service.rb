@@ -50,7 +50,7 @@ class NotionService
 
   end
 
-  def add_task(task_name, due_date)
+  def add_task(task_name, due_date, action_date)
     db_id = ENV.fetch("TASKS_DB_KEY")
     properties = {
       'Name' => {
@@ -65,6 +65,11 @@ class NotionService
       'Deadline' => {
         'date' => {
           'start' => due_date
+        }
+      },
+      'Action Date' => {
+        'date' => {
+          'start' => action_date
         }
       },
       'Status' => {
