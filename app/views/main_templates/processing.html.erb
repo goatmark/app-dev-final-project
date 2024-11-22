@@ -2,6 +2,8 @@
 <h1>Dictation App: Confirmation</h1>
 
 <hr>
+<h2>Send to ChatGPT</h2>
+<br><br><br>
 
 <%if @result == "note" || @result == "task"%>
 
@@ -15,7 +17,7 @@
     <div><b>Action Date: </b><%=@action_date%><div>
   <%else%>
   <%end%>
-
+      
   <hr>
 
   <form action="/confirm" method="post">

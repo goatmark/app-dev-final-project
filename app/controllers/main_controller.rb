@@ -39,9 +39,14 @@ class MainController < ApplicationController
       flash[:deadline] = @deadline
       flash[:action_date] = @action_date
     else
+      redirect_to "/", alert: "Could not classify the transcription."
+      return
     end
 
-    render({:template => "main_templates/processing"})
+    # Clear the transcription from the session if you no longer need it
+    session.delete(:transcription)
+
+    render template: "main_templates/processing"
   end
 
   def confirm

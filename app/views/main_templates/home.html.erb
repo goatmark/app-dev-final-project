@@ -9,9 +9,14 @@
   <label for="input_box"></label>
   <textarea id = "input_box" name="input" rows="3" placeholder="Dictation will appear here..." lang="en"></textarea>
 
-  <button>Submit</button>
-</form>
+<audio id="audioPlayback" controls></audio>
 
+<form id="audioForm" action="/submit" method="post" enctype="multipart/form-data">
+  <%= csrf_meta_tags %>
+  <label for="audioFileInput"></label>
+  <input type="file" id="audioFileInput" name="audio_file" accept="audio/*" style="display: none;">
+  <button type="submit">Submit</button>
+</form>
 
 <script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script>
 <script>
