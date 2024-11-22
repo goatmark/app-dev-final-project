@@ -112,4 +112,5 @@ group :test do
 end
 
 gem "ruby-openai"
-gem 'notion-ruby-client'
+gem "notion-ruby-client"
+gem "sidekiq"

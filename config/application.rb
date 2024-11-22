@@ -36,5 +36,8 @@ module RailsTemplate
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # Related to audio_processing_job.rb, Sidekiq
+    config.active_job.queue_adapter = :sidekiq
   end
 end
