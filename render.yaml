@@ -6,13 +6,13 @@ services:
     buildCommand: "./bin/render-build.sh" # we already created these two files for you
     startCommand: "./bin/render-start.sh"
     envVars: # this section sets some ENV variables needed by Render for deployment
-      - key: SECRET_KEY_BASE
+      - key: 9RfV+ebxrPJovj58mlVvZzKSjE7UIW516zH88QSyi3E=
         generateValue: true
-      - key: DATABASE_URL
+      - key: postgresql://db_htz6_user:XT9JnckCjbvGuWtavLaffmuq7A6OAD1Z@dpg-ct09jhdds78s739kkev0-a/db_htz6
         fromDatabase:
           name: db
           property: connectionString
-      - key: WEB_CONCURRENCY
+      - key: 2
         value: 2
 databases: # this section provides some additional database configuration
   - name: db
