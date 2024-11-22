@@ -8,15 +8,15 @@ class MainController < ApplicationController
 
   def submit
     @note = params.fetch("input", "")
-    @hardcore_mode = params[:hardcore_mode] == '1'
+    @skip_confirmation = params[:skip_confirmation] == '1'
     flash[:note] = @note
-    flash[:hardcore_mode] = @hardcore_mode
+    flash[:skip_confirmation] = @skip_confirmation
     redirect_to("/processing")
   end
 
   def processing
     @note = flash[:note]
-    @hardcore_mode = flash[:hardcore_mode]
+    @skip_confirmation = flash[:skip_confirmation]
     @todays_date = Date.today.strftime("%Y-%m-%d")
 
     openai_class = OpenaiService.new
@@ -34,7 +34,7 @@ class MainController < ApplicationController
       return
     end
 
-    if @hardcore_mode
+    if @skip_confirmation
       notion_class = NotionService.new
 
       if @result == "note"
@@ -86,7 +86,7 @@ class MainController < ApplicationController
 
   def upload_audio
     audio_file = params[:audio_file]
-    hardcore_mode = params[:hardcore_mode] == '1'
+    skip_confirmation = params[:skip_confirmation] == '1'
   
     if audio_file
       # Save the uploaded file
@@ -95,7 +95,7 @@ class MainController < ApplicationController
       File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
   
       # Enqueue the processing job
-      AudioProcessingJob.perform_later(temp_audio_path.to_s, hardcore_mode)
+      AudioProcessingJob.perform_later(temp_audio_path.to_s, skip_confirmation)
   
       render json: { success: true, message: 'Your dictation is being processed.' }
     else

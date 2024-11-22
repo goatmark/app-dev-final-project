@@ -7,8 +7,8 @@
   <p style="color: red;"><%= flash[:alert] %></p>
 <% end %>
 
-<input type="checkbox" id="hardcore_mode" name="hardcore_mode" value="1" checked>
-<label for="hardcore_mode">Hardcore mode</label>
+<input type="checkbox" id="skip_confirmation" name="skip_confirmation" value="1" checked>
+<label for="skip_confirmation">Skip confirmation step ("hardcore mode")</label>
 <br><br>
 
 <button id="record-button">Record</button>
@@ -30,7 +30,7 @@
   const recordButton = document.getElementById('record-button');
   const stopButton = document.getElementById('stop-button');
   const inputBox = document.getElementById('input_box');
-  const hardcoreModeCheckbox = document.getElementById('hardcore_mode');
+  const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
 
   recordButton.addEventListener('click', async () => {
     recordButton.disabled = true;
@@ -61,7 +61,7 @@
       formData.append('authenticity_token', '<%= form_authenticity_token %>');
 
       const hardcoreMode = hardcoreModeCheckbox.checked ? '1' : '0';
-      formData.append('hardcore_mode', hardcoreMode);
+      formData.append('skip_confirmation', hardcoreMode);
 
       if (hardcoreMode === '1') {
         // Hardcore mode: process immediately without updating the textarea
