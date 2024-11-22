@@ -1,11 +1,15 @@
-<!--app/views/main_templates/home.html.erb-->
+<!-- app/views/main_templates/home.html.erb -->
 <h1>Dictation App</h1>
 
 <% if flash[:notice] %>
-  <p style="color: green;"><%= flash[:notice] %></p>
+  <p style="color: darkblue;"><%= flash[:notice] %></p>
 <% elsif flash[:alert] %>
   <p style="color: red;"><%= flash[:alert] %></p>
 <% end %>
+
+<input type="checkbox" id="hardcore_mode" name="hardcore_mode" value="1" checked>
+<label for="hardcore_mode">Hardcore mode</label>
+<br><br>
 
 <button id="record-button">Record</button>
 <button id="stop-button" disabled>Stop</button>
@@ -13,14 +17,9 @@
 <form action="/submit" method="post">
   <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
   <label for="input_box"></label>
-  <textarea id = "input_box" name="input" rows="3" placeholder="Dictation will appear here..." lang="en"></textarea>
+  <textarea id="input_box" name="input" rows="3" placeholder="Dictation will appear here..." lang="en"></textarea>
   <br>
   <button type="submit">Submit</button>
-  <br>
-  <br>
-  <br>
-  <input type="checkbox" id="hardcore_mode" name="hardcore_mode" value="1" checked>
-  <label for="hardcore_mode">Hardcore mode</label>
 </form>
 
 <script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script>
@@ -31,6 +30,7 @@
   const recordButton = document.getElementById('record-button');
   const stopButton = document.getElementById('stop-button');
   const inputBox = document.getElementById('input_box');
+  const hardcoreModeCheckbox = document.getElementById('hardcore_mode');
 
   recordButton.addEventListener('click', async () => {
     recordButton.disabled = true;
@@ -53,30 +53,54 @@
   });
 
   stopButton.addEventListener('click', () => {
-    recordButton.disabled = false;
-    stopButton.disabled = true;
-
     recorder.stopRecording(() => {
       let blob = recorder.getBlob();
 
       const formData = new FormData();
       formData.append('audio_file', blob, 'recording.wav');
+      formData.append('authenticity_token', '<%= form_authenticity_token %>');
 
-      fetch('/upload_audio', {
-        method: 'POST',
-        headers: {
-          'X-CSRF-Token': '<%= form_authenticity_token %>'
-        },
-        body: formData
-      })
-      .then(response => response.json())
-      .then(data => {
-        inputBox.value = data.transcription;
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        alert('An error occurred during transcription.');
-      });
+      const hardcoreMode = hardcoreModeCheckbox.checked ? '1' : '0';
+      formData.append('hardcore_mode', hardcoreMode);
+
+      if (hardcoreMode === '1') {
+        // Hardcore mode: process immediately without updating the textarea
+        fetch('/upload_audio', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            // Reload the page to display the flash message
+            window.location.reload();
+          } else {
+            alert(data.error || 'An error occurred during processing.');
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('An error occurred during processing.');
+        });
+      } else {
+        // Normal mode: update the textarea with the transcription
+        fetch('/upload_audio', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          inputBox.value = data.transcription;
+          recordButton.disabled = false;
+          stopButton.disabled = true;
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('An error occurred during transcription.');
+          recordButton.disabled = false;
+          stopButton.disabled = true;
+        });
+      }
 
       stream.getTracks().forEach(track => track.stop());
     });
