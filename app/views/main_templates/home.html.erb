@@ -1,6 +1,11 @@
 <!--app/views/main_templates/home.html.erb-->
 <h1>Dictation App</h1>
-<h2>New and improved!</h2>
+
+<% if flash[:notice] %>
+  <p style="color: green;"><%= flash[:notice] %></p>
+<% elsif flash[:alert] %>
+  <p style="color: red;"><%= flash[:alert] %></p>
+<% end %>
 
 <button id="record-button">Record</button>
 <button id="stop-button" disabled>Stop</button>
@@ -11,6 +16,11 @@
   <textarea id = "input_box" name="input" rows="3" placeholder="Dictation will appear here..." lang="en"></textarea>
   <br>
   <button type="submit">Submit</button>
+  <br>
+  <br>
+  <br>
+  <input type="checkbox" id="hardcore_mode" name="hardcore_mode" value="1" checked>
+  <label for="hardcore_mode">Hardcore mode</label>
 </form>
 
 <script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script>

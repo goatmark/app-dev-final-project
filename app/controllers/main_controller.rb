@@ -9,67 +9,81 @@ class MainController < ApplicationController
 
   def submit
     @note = params.fetch("input", "")
+    @hardcore_mode = params[:hardcore_mode] == '1'
     flash[:note] = @note
-    
+    flash[:hardcore_mode] = @hardcore_mode
     redirect_to("/processing")
   end
 
   def processing
     @note = flash[:note]
-
-    @todays_date = Date.today
-    @todays_date = @todays_date.strftime("%Y-%m-%d")
-    flash[:todays_date] = @todays_date
-    
+    @hardcore_mode = flash[:hardcore_mode]
+    @todays_date = Date.today.strftime("%Y-%m-%d")
+  
     openai_class = OpenaiService.new
-
     @result = openai_class.prompt_classify(message: @note)
-    flash[:result] = @result
-
+  
     if @result == "note"
       @body = openai_class.prompt_note_summary(message: @note)
       @title = openai_class.prompt_note_title(message: @note)
-      flash[:body] = @body
-      flash[:title] = @title
     elsif @result == "task"
       @task = openai_class.prompt_extract_task(message: @note)
-      @action_date = openai_class.prompt_extract_action_date(message: @note)
       @deadline = openai_class.prompt_extract_deadline(message: @note)
-      flash[:task] = @task
-      flash[:deadline] = @deadline
-      flash[:action_date] = @action_date
+      @action_date = openai_class.prompt_extract_action_date(message: @note)
     else
       redirect_to "/", alert: "Could not classify the transcription."
       return
     end
-
-    # Clear the transcription from the session if you no longer need it
-    session.delete(:transcription)
-
-    render template: "main_templates/processing"
+  
+    if @hardcore_mode
+      notion_class = NotionService.new
+  
+      if @result == "note"
+        notion_class.add_note(@title, @body, @todays_date)
+        flash[:notice] = "Added \"#{@title}\" to Notes, with body: \"#{@body}\""
+      elsif @result == "task"
+        notion_class.add_task(@task, @deadline, @action_date)
+        flash[:notice] = "Added \"#{@task}\" to Tasks, due \"#{@deadline}\", action date \"#{@action_date}\""
+      end
+  
+      redirect_to "/"
+    else
+      # Pass variables to the confirmation page
+      flash[:result] = @result
+      flash[:todays_date] = @todays_date
+  
+      if @result == "note"
+        flash[:body] = @body
+        flash[:title] = @title
+      elsif @result == "task"
+        flash[:task] = @task
+        flash[:deadline] = @deadline
+        flash[:action_date] = @action_date
+      end
+  
+      render template: "main_templates/processing"
+    end
   end
 
   def confirm
-
     @result = flash[:result]
     notion_class = NotionService.new
-    
     @todays_date = flash[:todays_date]
-
+  
     if @result == "note"
       @body = flash[:body]
       @title = flash[:title]
       notion_class.add_note(@title, @body, @todays_date)
+      flash[:notice] = "Added \"#{@title}\" to Notes, with body: \"#{@body}\""
     elsif @result == "task"
       @task = flash[:task]
       @deadline = flash[:deadline]
       @action_date = flash[:action_date]
       notion_class.add_task(@task, @deadline, @action_date)
-    else
+      flash[:notice] = "Added \"#{@task}\" to Tasks, due \"#{@deadline}\", action date \"#{@action_date}\""
     end
-
-
-    redirect_to("/")
+  
+    redirect_to "/"
   end
 
   def upload_audio
