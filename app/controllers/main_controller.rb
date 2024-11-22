@@ -1,60 +1,43 @@
 # app / controllers / main_controller.rb
 class MainController < ApplicationController
 
+  protect_from_forgery except: :upload_audio
+
   def main
     render({:template => "main_templates/home"})
   end 
 
   def submit
-    audio_file = params[:audio_file]
-
-    if audio_file.present?
-      # Save the uploaded file temporarily
-      file_path = Rails.root.join('tmp', 'recording.wav')
-      File.open(file_path, 'wb') { |file| file.write(audio_file.read) }
-
-      # Use the OpenAIService to transcribe the audio
-      openai_service = OpenaiService.new
-      transcription = openai_service.transcribe_audio(file_path)
-
-      # Clean up the temporary file
-      File.delete(file_path) if File.exist?(file_path)
-
-      # Process the transcription as needed
-      if transcription
-        session[:transcription] = transcription
-        redirect_to "/processing", notice: "Transcription successful!"
-      else
-        redirect_to "/", alert: "Transcription failed."
-      end
-    else
-      redirect_to "/", alert: "No audio file uploaded."
-    end
+    @note = params.fetch("input", "")
+    flash[:note] = @note
+    
+    redirect_to("/processing")
   end
 
   def processing
-    transcription = session[:transcription]
+    @note = flash[:note]
 
-    if transcription.blank?
-      redirect_to "/", alert: "No transcription available."
-      return
-    end
+    @todays_date = Date.today
+    @todays_date = @todays_date.strftime("%Y-%m-%d")
+    flash[:todays_date] = @todays_date
+    
+    openai_class = OpenaiService.new
 
-    openai_service = OpenaiService.new
-
-    @result = openai_service.prompt_classify(message: transcription)
+    @result = openai_class.prompt_classify(message: @note)
+    flash[:result] = @result
 
     if @result == "note"
-      @body = openai_service.prompt_note_summary(message: transcription)
-      @title = openai_service.prompt_note_title(message: transcription)
-
-      # Proceed to create Notion pages or further processing
-      notion_service = NotionService.new
-      @todays_date = Date.today.strftime("%Y-%m-%d")
-      notion_service.add_note(@title, @body, @todays_date)
+      @body = openai_class.prompt_note_summary(message: @note)
+      @title = openai_class.prompt_note_title(message: @note)
+      flash[:body] = @body
+      flash[:title] = @title
     elsif @result == "task"
-      @task = openai_service.prompt_extract_task(message: transcription)
-      @deadline = openai_service.prompt_extract_deadline(message: transcription)
+      @task = openai_class.prompt_extract_task(message: @note)
+      @action_date = openai_class.prompt_extract_action_date(message: @note)
+      @deadline = openai_class.prompt_extract_deadline(message: @note)
+      flash[:task] = @task
+      flash[:deadline] = @deadline
+      flash[:action_date] = @action_date
     else
       redirect_to "/", alert: "Could not classify the transcription."
       return
@@ -64,5 +47,49 @@ class MainController < ApplicationController
     session.delete(:transcription)
 
     render template: "main_templates/processing"
+  end
+
+  def confirm
+
+    @result = flash[:result]
+    notion_class = NotionService.new
+    
+    @todays_date = flash[:todays_date]
+
+    if @result == "note"
+      @body = flash[:body]
+      @title = flash[:title]
+      notion_class.add_note(@title, @body, @todays_date)
+    elsif @result == "task"
+      @task = flash[:task]
+      @deadline = flash[:deadline]
+      @action_date = flash[:action_date]
+      notion_class.add_task(@task, @deadline, @action_date)
+    else
+    end
+
+
+    redirect_to("/")
+  end
+
+  def upload_audio
+    audio_file = params[:audio_file]
+
+    if audio_file
+      temp_audio_path = Rails.root.join('tmp', 'uploads', audio_file.original_filename)
+      FileUtils.mkdir_p(File.dirname(temp_audio_path))
+      File.open(temp_audio_path, 'wb') do |file|
+        file.write(audio_file.read)
+      end
+
+      openai_class = OpenaiService.new
+      transcription = openai_class.transcribe_audio(temp_audio_path.to_s)
+
+      File.delete(temp_audio_path) if File.exist?(temp_audio_path)
+
+      render json: { transcription: transcription }
+    else
+      render json: { error: 'No audio file received.' }, status: :unprocessable_entity
+    end
   end
 end

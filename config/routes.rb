@@ -11,4 +11,6 @@ Rails.application.routes.draw do
   get("/processing", {:controller => "main", :action => "processing"})
 
   post("/submit", {:controller => "main", :action => "submit"})
+  post("/confirm", {:controller => "main", :action => "confirm"})
+  post("/upload_audio", {:controller => "main", :action => "upload_audio"})
 end

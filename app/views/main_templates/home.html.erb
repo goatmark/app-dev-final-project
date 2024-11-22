@@ -1,8 +1,13 @@
-<!-- app/views/main_templates/home.html.erb-->
+<!--app/views/main_templates/home.html.erb-->
 <h1>Dictation App</h1>
 
-<button id="recordButton">Start Recording</button><br>
-<button id="stopButton" disabled>Stop Recording</button><br>
+<button id="record-button">Record</button>
+<button id="stop-button" disabled>Stop</button>
+
+<form action="/submit" method="post">
+  <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+  <label for="input_box"></label>
+  <textarea id = "input_box" name="input" rows="3" placeholder="Dictation will appear here..." lang="en"></textarea>
 
 <audio id="audioPlayback" controls></audio>
 
@@ -13,55 +18,62 @@
   <button type="submit">Submit</button>
 </form>
 
+<script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script>
 <script>
-  let mediaRecorder;
-  let audioChunks = [];
+  let recorder;
+  let stream;
 
-  const recordButton = document.getElementById('recordButton');
-  const stopButton = document.getElementById('stopButton');
-  const audioPlayback = document.getElementById('audioPlayback');
-  const audioFileInput = document.getElementById('audioFileInput');
+  const recordButton = document.getElementById('record-button');
+  const stopButton = document.getElementById('stop-button');
+  const inputBox = document.getElementById('input_box');
 
   recordButton.addEventListener('click', async () => {
-    audioChunks = [];
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.start();
-
-    mediaRecorder.addEventListener('dataavailable', event => {
-      audioChunks.push(event.data);
-    });
-
-    mediaRecorder.addEventListener('stop', () => {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      const audioUrl = URL.createObjectURL(audioBlob);
-      audioPlayback.src = audioUrl;
-
-      // Prepare the audio file input for form submission
-      const file = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-      audioFileInput.files = dataTransfer.files;
-    });
-
     recordButton.disabled = true;
     stopButton.disabled = false;
 
-    
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recorder = RecordRTC(stream, { type: 'audio' });
+        recorder.startRecording();
+      } catch (err) {
+        console.error('Error:', err);
+        alert('An error occurred while accessing the microphone.');
+        recordButton.disabled = false;
+        stopButton.disabled = true;
+      }
+    } else {
+      alert('Your browser does not support audio recording.');
+    }
   });
 
   stopButton.addEventListener('click', () => {
-    mediaRecorder.stop();
     recordButton.disabled = false;
     stopButton.disabled = true;
-  });
 
-  const audioForm = document.getElementById('audioForm');
+    recorder.stopRecording(() => {
+      let blob = recorder.getBlob();
 
-  audioForm.addEventListener('submit', (event) => {
-    if (audioFileInput.files.length === 0) {
-      event.preventDefault();
-      alert('Please record audio before submitting.');
-    }
+      const formData = new FormData();
+      formData.append('audio_file', blob, 'recording.wav');
+
+      fetch('/upload_audio', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-Token': '<%= form_authenticity_token %>'
+        },
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        inputBox.value = data.transcription;
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred during transcription.');
+      });
+
+      stream.getTracks().forEach(track => track.stop());
+    });
   });
 </script>
