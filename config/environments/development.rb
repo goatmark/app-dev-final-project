@@ -85,4 +85,7 @@ Rails.application.configure do
 
   # Allow POST authenticity on Codespaces in dev
   config.action_controller.forgery_protection_origin_check = false
+
+  # Related to audio_processing_job.rb
+  config.active_job.queue_adapter = :inline
 end
