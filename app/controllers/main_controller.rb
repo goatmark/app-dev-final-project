@@ -89,17 +89,61 @@ class MainController < ApplicationController
     skip_confirmation = params[:skip_confirmation] == '1'
   
     if audio_file
-      # Save the uploaded file
       temp_audio_path = Rails.root.join('tmp', 'uploads', audio_file.original_filename)
       FileUtils.mkdir_p(File.dirname(temp_audio_path))
       File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
   
-      # Enqueue the processing job
-      AudioProcessingJob.perform_later(temp_audio_path.to_s, skip_confirmation)
+      openai_class = OpenaiService.new
+      transcription = openai_class.transcribe_audio(temp_audio_path.to_s)
   
-      render json: { success: true, message: 'Your dictation is being processed.' }
+      File.delete(temp_audio_path) if File.exist?(temp_audio_path)
+  
+      if skip_confirmation
+        # Process transcription and update Notion directly
+        result = process_transcription(transcription)
+        if result[:success]
+          flash[:notice] = result[:message]
+          render json: { success: true }
+        else
+          flash[:alert] = result[:error]
+          render json: { success: false, error: result[:error] }
+        end
+      else
+        # Non-hardcore mode: return transcription for manual submission
+        render json: { transcription: transcription }
+      end
     else
       render json: { error: 'No audio file received.' }, status: :unprocessable_entity
     end
+  end
+  
+  private
+
+  def process_transcription(note)
+    openai_class = OpenaiService.new
+    todays_date = Date.today.strftime("%Y-%m-%d")
+    result = openai_class.prompt_classify(message: note)
+
+    notion_class = NotionService.new
+
+    if result == "note"
+      body = openai_class.prompt_note_summary(message: note)
+      title = openai_class.prompt_note_title(message: note)
+      notion_class.add_note(title, body, todays_date)
+      message = "Added \"#{title}\" to Notes, with body: \"#{body}\""
+      { success: true, message: message }
+    elsif result == "task"
+      task = openai_class.prompt_extract_task(message: note)
+      deadline = openai_class.prompt_extract_deadline(message: note)
+      action_date = openai_class.prompt_extract_action_date(message: note)
+      notion_class.add_task(task, deadline, action_date)
+      message = "Added \"#{task}\" to Tasks, due \"#{deadline}\", action date \"#{action_date}\""
+      { success: true, message: message }
+    else
+      { success: false, error: 'Could not classify the transcription.' }
+    end
+  rescue => e
+    Rails.logger.error "Processing transcription failed: #{e.message}"
+    { success: false, error: 'An error occurred during processing.' }
   end
 end

@@ -76,11 +76,15 @@
             window.location.reload();
           } else {
             alert(data.error || 'An error occurred during processing.');
+            recordButton.disabled = false;
+            stopButton.disabled = true;
           }
         })
         .catch(error => {
           console.error('Error:', error);
           alert('An error occurred during processing.');
+          recordButton.disabled = false;
+          stopButton.disabled = true;
         });
       } else {
         // Normal mode: update the textarea with the transcription
