@@ -1,12 +1,11 @@
 <h1>Dictation App: Confirmation</h1>
 <hr>
 
-<% case @result %>
-<% when "note" %>
+<% if @result == 'note' %>
   <div><b>Note title: </b><%= @title %></div>
   <div><b>Note body: </b><%= @body %></div>
   <div><b>Note date: </b><%= @todays_date %></div>
-<% when "task" %>
+<% elsif @result == 'task' %>
   <div><b>Task: </b><%= @task %></div>
   <div><b>Deadline: </b><%= @deadline %></div>
   <div><b>Action Date: </b><%= @action_date %></div>
@@ -18,15 +17,42 @@
   <h3>Related Entities:</h3>
   <ul>
     <% @related_entities.each do |entity| %>
-      <li><b><%= entity['type'].capitalize %>:</b> <%= entity['name'] %></li>
+      <li>
+        <b><%= entity['type'].capitalize %>:</b> <%= entity['name'] %>
+        <% if entity[:page_id] %>
+          (Page ID: <%= entity[:page_id] %>, Match Type: <%= entity[:match_type] %>)
+        <% else %>
+          (No matching page found)
+        <% end %>
+      </li>
     <% end %>
   </ul>
+<% else %>
+  <h3>Related Entities:</h3>
+  <p>No entities extracted.</p>
 <% end %>
+
+<h3>Debugging Information</h3>
+<pre>
+Result: <%= @result %>
+Extracted Entities: <%= @related_entities.inspect %>
+OpenAI API Response: <%= @api_response %>
+</pre>
 
 <hr>
 
 <form action="/confirm" method="post">
   <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+  <% if @result == 'task' %>
+    <input type="hidden" name="task" value="<%= @task %>">
+    <input type="hidden" name="deadline" value="<%= @deadline %>">
+    <input type="hidden" name="action_date" value="<%= @action_date %>">
+  <% elsif @result == 'note' %>
+    <input type="hidden" name="title" value="<%= @title %>">
+    <input type="hidden" name="body" value="<%= @body %>">
+  <% end %>
+  <input type="hidden" name="result" value="<%= @result %>">
+  <input type="hidden" name="related_entities" value='<%= @related_entities.to_json %>'>
   <button>Confirm</button>
 </form>
 

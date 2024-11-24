@@ -1,3 +1,5 @@
+# app/controllers/main_controller.rb
+
 class MainController < ApplicationController
   protect_from_forgery except: :upload_audio
 
@@ -9,9 +11,7 @@ class MainController < ApplicationController
   def submit
     @note = params.fetch("input", "")
     @skip_confirmation = params[:skip_confirmation] == '1'
-    flash[:note] = @note
-    flash[:skip_confirmation] = @skip_confirmation
-    redirect_to("/processing")
+    redirect_to("/processing", flash: { note: @note, skip_confirmation: @skip_confirmation })
   end
 
   def processing
@@ -19,87 +19,44 @@ class MainController < ApplicationController
     @skip_confirmation = flash[:skip_confirmation]
     @todays_date = Date.today.strftime("%Y-%m-%d")
 
-    openai_class = OpenaiService.new
-    @result = openai_class.prompt_classify(message: @note)
-
-    notion_class = NotionService.new
+    openai_service = OpenaiService.new
+    @result = openai_service.classify_message(message: @note)
 
     case @result
     when "note"
-      @body = openai_class.prompt_note_summary(message: @note)
-      @title = openai_class.prompt_note_title(message: @note)
-
-      # Extract related entities
-      @related_entities = openai_class.extract_related_entities(message: @note)
-
-      if @skip_confirmation
-        process_note(notion_class, openai_class)
-        flash[:notice] = notion_class.action_log.join("\n")
-        redirect_to "/"
-      else
-        flash[:body] = @body
-        flash[:title] = @title
-        flash[:result] = @result
-        flash[:related_entities] = @related_entities
-        render template: "main_templates/processing"
-      end
+      process_note
     when "task"
-      @task = openai_class.prompt_extract_task(message: @note)
-      @deadline = openai_class.prompt_extract_deadline(message: @note)
-      @action_date = openai_class.prompt_extract_action_date(message: @note)
-
-      # Extract related entities
-      @related_entities = openai_class.extract_related_entities(message: @note)
-
-      if @skip_confirmation
-        process_task(notion_class, openai_class)
-        flash[:notice] = notion_class.action_log.join("\n")
-        redirect_to "/"
-      else
-        flash[:task] = @task
-        flash[:deadline] = @deadline
-        flash[:action_date] = @action_date
-        flash[:result] = @result
-        flash[:related_entities] = @related_entities
-        render template: "main_templates/processing"
-      end
+      process_task
     else
       redirect_to "/", alert: "Could not classify the transcription."
     end
   end
 
   def confirm
-    @result = flash[:result]
+    @result = params[:result]
     @todays_date = Date.today.strftime("%Y-%m-%d")
-
-    openai_class = OpenaiService.new
-    notion_class = NotionService.new
-
+    notion_service = NotionService.new
+  
     case @result
     when "note"
-      @body = flash[:body]
-      @title = flash[:title]
-      @related_entities = flash[:related_entities] || []
-
-      process_note(notion_class, openai_class)
-      flash[:notice] = notion_class.action_log.join("\n")
-      redirect_to "/"
+      @title = params[:title]
+      @body = params[:body]
+      @related_entities = JSON.parse(params[:related_entities])
+      process_entities(notion_service, nil, 'note')
+      render template: "main_templates/processing"
     when "task"
-      @task = flash[:task]
-      @deadline = flash[:deadline]
-      @action_date = flash[:action_date]
-      @related_entities = flash[:related_entities] || []
-
-      process_task(notion_class, openai_class)
-      flash[:notice] = notion_class.action_log.join("\n")
-      redirect_to "/"
+      @task = params[:task]
+      @deadline = params[:deadline]
+      @action_date = params[:action_date]
+      @related_entities = JSON.parse(params[:related_entities])
+      process_entities(notion_service, nil, 'task')
+      render template: "main_templates/processing"
     else
       flash[:alert] = "Unknown result type."
       redirect_to "/"
     end
   end
 
-  # Place upload_audio here, as a public method
   def upload_audio
     audio_file = params[:audio_file]
     skip_confirmation = params[:skip_confirmation] == '1'
@@ -109,14 +66,14 @@ class MainController < ApplicationController
       FileUtils.mkdir_p(File.dirname(temp_audio_path))
       File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
 
-      openai_class = OpenaiService.new
-      transcription = openai_class.transcribe_audio(audio_file_path: temp_audio_path.to_s)
+      openai_service = OpenaiService.new
+      transcription = openai_service.transcribe_audio(audio_file_path: temp_audio_path.to_s)
 
       File.delete(temp_audio_path) if File.exist?(temp_audio_path)
 
       if skip_confirmation
         # Process transcription and update Notion directly
-        result = process_transcription(note: transcription)
+        result = process_transcription(transcription)
         if result[:success]
           flash[:notice] = result[:message]
           render json: { success: true }
@@ -135,75 +92,96 @@ class MainController < ApplicationController
 
   private
 
-  def process_note(notion_class, openai_class)
-    # Create the note
-    new_note = notion_class.add_note(title: @title, body: @body, formatted_date: @todays_date)
+  def process_note
+    openai_service = OpenaiService.new
+    notion_service = NotionService.new
 
-    # Process entities and add relations independently
-    relations_hash = {}
-    @related_entities.each do |entity|
-      page_id = notion_class.find_or_create_entity(name: entity['name'], type: entity['type'])
-      relation_field = get_relation_field_for_note_entity_type(entity['type'])
-      if relation_field && page_id
-        relations_hash[relation_field] ||= []
-        relations_hash[relation_field] << page_id
-      end
-    end
+    @body = openai_service.extract_note_body(message: @note)
+    @title = openai_service.extract_note_title(message: @note)
+    @related_entities = openai_service.extract_related_entities(message: @note)
+    @api_response = openai_service.get_last_api_response
 
-    # Add relations to the note
-    if relations_hash.any?
-      notion_class.add_relations_to_page(page_id: new_note['id'], relations_hash: relations_hash, relation_fields: NotionService::NOTES_RELATIONS)
+    if @skip_confirmation
+      create_note_in_notion(notion_service)
+      flash[:notice] = notion_service.action_log.join("\n")
+      redirect_to "/"
+    else
+      render template: "main_templates/processing"
     end
   end
 
-  def process_task(notion_class, openai_class)
-    # Create the task
-    new_task = notion_class.add_task(task_name: @task, due_date: @deadline, action_date: @action_date)
+  def process_task
+    openai_service = OpenaiService.new
+    notion_service = NotionService.new
 
-    # Process entities and add relations independently
-    relations_hash = {}
-    @related_entities.each do |entity|
-      page_id = notion_class.find_or_create_entity(name: entity['name'], type: entity['type'])
-      relation_field = get_relation_field_for_task_entity_type(entity['type'])
-      if relation_field && page_id
-        relations_hash[relation_field] ||= []
-        relations_hash[relation_field] << page_id
-      end
-    end
+    @task = openai_service.extract_task_summary(message: @note)
+    @deadline = openai_service.extract_deadline(message: @note)
+    @action_date = openai_service.extract_action_date(message: @note)
+    @related_entities = openai_service.extract_related_entities(message: @note)
+    @api_response = openai_service.get_last_api_response
 
-    # Add relations to the task
-    if relations_hash.any?
-      notion_class.add_relations_to_page(page_id: new_task['id'], relations_hash: relations_hash, relation_fields: NotionService::TASKS_RELATIONS)
+    if @skip_confirmation
+      create_task_in_notion(notion_service)
+      flash[:notice] = notion_service.action_log.join("\n")
+      redirect_to "/"
+    else
+      render template: "main_templates/processing"
     end
   end
 
-  def process_transcription(note:)
-    openai_class = OpenaiService.new
-    todays_date = Date.today.strftime("%Y-%m-%d")
-    result = openai_class.prompt_classify(message: note)
+  def create_note_in_notion(notion_service)
+    new_note = notion_service.add_note(title: @title, body: @body, date: @todays_date)
+    process_entities(notion_service, new_note['id'], 'note')
+  end
 
-    notion_class = NotionService.new
+  def create_task_in_notion(notion_service)
+    new_task = notion_service.add_task(name: @task, deadline: @deadline, action_date: @action_date)
+    process_entities(notion_service, new_task['id'], 'task')
+  end
 
-    case result
+  def process_entities(notion_service, page_id, item_type)
+    relations_hash = {}
+    @related_entities.each do |entity|
+      relation_field = get_relation_field_for_entity_type(entity['type'], item_type)
+      next unless relation_field
+  
+      page_id_entity, match_type = notion_service.find_or_create_entity(name: entity['name'], relation_field: relation_field)
+      relations_hash[relation_field] ||= []
+      relations_hash[relation_field] << page_id_entity if page_id_entity
+  
+      # Update the entity hash with matching information
+      entity[:page_id] = page_id_entity
+      entity[:match_type] = match_type
+    end
+  
+    if page_id
+      notion_service.add_relations_to_page(page_id: page_id, relations_hash: relations_hash) if relations_hash.any?
+    end
+  end
+
+  def process_transcription(transcription)
+    openai_service = OpenaiService.new
+    @note = transcription
+    @todays_date = Date.today.strftime("%Y-%m-%d")
+    @result = openai_service.classify_message(message: @note)
+
+    notion_service = NotionService.new
+
+    case @result
     when "note"
-      body = openai_class.prompt_note_summary(message: note)
-      title = openai_class.prompt_note_title(message: note)
-      @title = title
-      @body = body
-      @related_entities = openai_class.extract_related_entities(message: note)
-      process_note(notion_class, openai_class)
-      message = notion_class.action_log.join("\n")
+      @body = openai_service.extract_note_body(message: @note)
+      @title = openai_service.extract_note_title(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      create_note_in_notion(notion_service)
+      message = notion_service.action_log.join("\n")
       { success: true, message: message }
     when "task"
-      task = openai_class.prompt_extract_task(message: note)
-      deadline = openai_class.prompt_extract_deadline(message: note)
-      action_date = openai_class.prompt_extract_action_date(message: note)
-      @task = task
-      @deadline = deadline
-      @action_date = action_date
-      @related_entities = openai_class.extract_related_entities(message: note)
-      process_task(notion_class, openai_class)
-      message = notion_class.action_log.join("\n")
+      @task = openai_service.extract_task_summary(message: @note)
+      @deadline = openai_service.extract_deadline(message: @note)
+      @action_date = openai_service.extract_action_date(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      create_task_in_notion(notion_service)
+      message = notion_service.action_log.join("\n")
       { success: true, message: message }
     else
       { success: false, error: 'Could not classify the transcription.' }
@@ -213,25 +191,19 @@ class MainController < ApplicationController
     { success: false, error: 'An error occurred during processing.' }
   end
 
-  def get_relation_field_for_note_entity_type(entity_type)
-    case entity_type
-    when 'person'
-      'People'
-    when 'company'
-      'Company'
-    when 'class'
-      'Course'
-    else
-      nil
-    end
-  end
-
-  def get_relation_field_for_task_entity_type(entity_type)
-    case entity_type
-    when 'person'
-      'People'
-    when 'company'
-      'Organization'
+  def get_relation_field_for_entity_type(entity_type, item_type)
+    if item_type == 'note'
+      {
+        'person' => 'People',
+        'company' => 'Company',
+        'class' => 'Course'
+      }[entity_type]
+    elsif item_type == 'task'
+      {
+        'person' => 'People',
+        'company' => 'Organization',
+        'class' => 'Course'
+      }[entity_type]
     else
       nil
     end
