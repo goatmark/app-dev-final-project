@@ -76,36 +76,50 @@ class MainController < ApplicationController
   def upload_audio
     audio_file = params[:audio_file]
     skip_confirmation = params[:skip_confirmation] == '1'
-
+    Rails.logger.debug "Received upload_audio request. Audio file present: #{audio_file.present?}, Skip Confirmation: #{skip_confirmation}"
+  
     if audio_file
       temp_audio_path = Rails.root.join('tmp', 'uploads', audio_file.original_filename)
-      FileUtils.mkdir_p(File.dirname(temp_audio_path))
-      File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
-
-      openai_service = OpenaiService.new
-      transcription = openai_service.transcribe_audio(audio_file_path: temp_audio_path.to_s)
-
-      File.delete(temp_audio_path) if File.exist?(temp_audio_path)
-
-      if skip_confirmation
-        # Process transcription and update Notion directly
-        result = process_transcription(transcription)
-        if result[:success]
-          flash[:notice] = result[:message]
-          render json: { success: true }
+      Rails.logger.debug "Saving audio to: #{temp_audio_path}"
+      begin
+        FileUtils.mkdir_p(File.dirname(temp_audio_path))
+        File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
+        Rails.logger.debug "Audio file saved successfully."
+  
+        openai_service = OpenaiService.new
+        transcription = openai_service.transcribe_audio(audio_file_path: temp_audio_path.to_s)
+        Rails.logger.debug "Transcription received: #{transcription}"
+  
+        File.delete(temp_audio_path) if File.exist?(temp_audio_path)
+        Rails.logger.debug "Temporary audio file deleted."
+  
+        if skip_confirmation
+          Rails.logger.debug "Processing transcription in hardcore mode."
+          result = process_transcription(transcription)
+          if result[:success]
+            flash[:notice] = result[:message]
+            Rails.logger.debug "Transcription processed successfully."
+            render json: { success: true }
+          else
+            flash[:alert] = result[:error]
+            Rails.logger.error "Error processing transcription: #{result[:error]}"
+            render json: { success: false, error: result[:error] }
+          end
         else
-          flash[:alert] = result[:error]
-          render json: { success: false, error: result[:error] }
+          Rails.logger.debug "Returning transcription for manual confirmation."
+          render json: { transcription: transcription }
         end
-      else
-        # Non-confirmation mode: return transcription for manual submission
-        render json: { transcription: transcription }
+      rescue => e
+        Rails.logger.error "Exception in upload_audio: #{e.message}"
+        Rails.logger.error e.backtrace.join("\n")
+        render json: { error: 'An error occurred while processing the audio.' }, status: :internal_server_error
       end
     else
+      Rails.logger.warn "No audio file received in upload_audio."
       render json: { error: 'No audio file received.' }, status: :unprocessable_entity
     end
   end
-
+  
   private
 
   def process_note

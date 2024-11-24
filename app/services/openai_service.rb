@@ -1,19 +1,44 @@
 # app/services/openai_service.rb
 
+require 'net/http/post/multipart' # Ensure this is at the top
+
 class OpenaiService
+
+  OPENAI_API_KEY = ENV.fetch("OPENAI_KEY")
   def initialize
     @client = OpenAI::Client.new
   end
 
-  def transcribe_audio(audio_file_path)
-    response = @client.audio.transcribe(
-      parameters: {
-        model: "whisper-1",
-        file: File.open(audio_file_path, "rb")
-      }
-    )
-    transcription = response['text']
-    return transcription
+  def transcribe_audio(audio_file_path:)
+    uri = URI.parse("https://api.openai.com/v1/audio/transcriptions")
+
+    # Create the multipart POST request
+    File.open(audio_file_path) do |file|
+      request = Net::HTTP::Post::Multipart.new uri.path,
+        "file" => UploadIO.new(file, "audio/wav", File.basename(file)),
+        "model" => "whisper-1",
+        "language" => "en"
+
+      # Set the Authorization header
+      request["Authorization"] = "Bearer #{OPENAI_API_KEY}"
+
+      # Execute the request
+      response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
+        http.request(request)
+      end
+
+      # Handle the response
+      if response.is_a?(Net::HTTPSuccess)
+        result = JSON.parse(response.body)
+        result["text"]
+      else
+        Rails.logger.error "OpenAI Transcription Error: #{response.body}"
+        raise "Transcription failed with status #{response.code}"
+      end
+    end
+  rescue => e
+    Rails.logger.error "Exception in transcribe_audio: #{e.message}"
+    raise e
   end
 
   def classify_message(message:)

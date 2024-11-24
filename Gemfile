@@ -114,3 +114,4 @@ end
 gem "ruby-openai"
 gem "notion-ruby-client"
 gem "sidekiq"
+gem 'multipart-post'

@@ -46,28 +46,36 @@
   const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
 
   recordButton.addEventListener('click', async () => {
+    console.log('Record button clicked');
     recordButton.disabled = true;
     stopButton.disabled = false;
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
+        console.log('Requesting microphone access');
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        recorder = RecordRTC(stream, { type: 'audio' });
+        console.log('Microphone access granted');
+        recorder = RecordRTC(stream, { type: 'audio', mimeType: 'audio/wav' });
         recorder.startRecording();
+        console.log('Recording started');
       } catch (err) {
-        console.error('Error:', err);
+        console.error('Error accessing microphone:', err);
         alert('An error occurred while accessing the microphone.');
         recordButton.disabled = false;
         stopButton.disabled = true;
       }
     } else {
       alert('Your browser does not support audio recording.');
+      console.warn('Browser does not support audio recording');
     }
   });
 
   stopButton.addEventListener('click', () => {
+    console.log('Stop button clicked');
     recorder.stopRecording(() => {
+      console.log('Recording stopped');
       let blob = recorder.getBlob();
+      console.log('Blob created:', blob);
 
       const formData = new FormData();
       formData.append('audio_file', blob, 'recording.wav');
@@ -75,51 +83,70 @@
 
       const hardcoreMode = hardcoreModeCheckbox.checked ? '1' : '0';
       formData.append('skip_confirmation', hardcoreMode);
+      console.log('FormData prepared:', {
+        audio_file: blob,
+        authenticity_token: '<%= form_authenticity_token %>',
+        skip_confirmation: hardcoreMode
+      });
+
+      const fetchOptions = {
+        method: 'POST',
+        body: formData
+      };
 
       if (hardcoreMode === '1') {
+        console.log('Submitting audio in hardcore mode');
         // Hardcore mode: process immediately without updating the textarea
-        fetch('/upload_audio', {
-          method: 'POST',
-          body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            // Reload the page to display the flash message
-            window.location.reload();
-          } else {
-            alert(data.error || 'An error occurred during processing.');
+        fetch('/upload_audio', fetchOptions)
+          .then(response => response.json())
+          .then(data => {
+            console.log('Response received:', data);
+            if (data.success) {
+              // Reload the page to display the flash message
+              window.location.reload();
+            } else {
+              alert(data.error || 'An error occurred during processing.');
+              recordButton.disabled = false;
+              stopButton.disabled = true;
+              console.error('Processing failed:', data.error);
+            }
+          })
+          .catch(error => {
+            console.error('Fetch error:', error);
+            alert('An error occurred during processing.');
             recordButton.disabled = false;
             stopButton.disabled = true;
-          }
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          alert('An error occurred during processing.');
-          recordButton.disabled = false;
-          stopButton.disabled = true;
-        });
+          });
       } else {
+        console.log('Submitting audio in normal mode');
         // Normal mode: update the textarea with the transcription
-        fetch('/upload_audio', {
-          method: 'POST',
-          body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-          inputBox.value = data.transcription;
-          recordButton.disabled = false;
-          stopButton.disabled = true;
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          alert('An error occurred during transcription.');
-          recordButton.disabled = false;
-          stopButton.disabled = true;
-        });
+        fetch('/upload_audio', fetchOptions)
+          .then(response => response.json())
+          .then(data => {
+            console.log('Response received:', data);
+            if (data.transcription) {
+              inputBox.value = data.transcription;
+              console.log('Textarea updated with transcription');
+            } else {
+              alert('No transcription received.');
+              console.warn('No transcription in response');
+            }
+            recordButton.disabled = false;
+            stopButton.disabled = true;
+          })
+          .catch(error => {
+            console.error('Fetch error:', error);
+            alert('An error occurred during transcription.');
+            recordButton.disabled = false;
+            stopButton.disabled = true;
+          });
       }
 
-      stream.getTracks().forEach(track => track.stop());
+      // Stop all audio tracks to release the microphone
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        console.log('Audio tracks stopped');
+      }
     });
   });
 </script>

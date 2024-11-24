@@ -485,6 +485,7 @@ DEPENDENCIES
   http
   importmap-rails
   jbuilder
+  multipart-post
   notion-ruby-client
   pg (~> 1.1)
   pry-rails
