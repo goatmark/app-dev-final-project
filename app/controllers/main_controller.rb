@@ -186,7 +186,7 @@ class MainController < ApplicationController
   end
 
   def create_note_in_notion(notion_service)
-    new_note = notion_service.add_note(title: @title, body: @body, date: params[:date], relations: @related_entities)
+    new_note = notion_service.add_note(title: @title, body: @body, date: Date.today.strftime('%Y-%m-%d'), relations: @related_entities)
     process_entities(notion_service, new_note['id'], 'note')
   end
 
