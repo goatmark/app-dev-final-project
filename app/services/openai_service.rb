@@ -140,4 +140,62 @@ class OpenaiService
     body = response.dig("choices", 0, "message", "content").strip
     return(body)
   end
+
+  # Function to find the best match using OpenAI
+  def find_best_match(search_term:, options:, chosen_model: 'gpt-3.5-turbo')
+    options_list = options.join("\n")
+    prompt = <<~PROMPT
+      Given the search term "#{search_term}", find the best match from the following options:
+      #{options_list}
+      Return only the exact text of the best matching option, or "No match" if none is suitable.
+    PROMPT
+
+    response = @client.chat(
+      parameters: {
+        model: chosen_model,
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        temperature: 0
+      }
+    )
+
+    result = response.dig("choices", 0, "message", "content").strip
+    return nil if result.downcase == "no match"
+    return result
+  end
+
+  # Method to extract related entities with their types
+  def extract_related_entities(message:, chosen_model: 'gpt-3.5-turbo')
+    prompt = <<~PROMPT
+      From the following message, extract all names of people, classes (courses), or companies mentioned that could be relations in a Notion database.
+      For each entity, identify its type as one of: "person", "class", or "company".
+      Return the results in JSON format as an array of objects with "name" and "type" keys.
+      Example:
+      [
+        {"name": "Mitch Matthews", "type": "person"},
+        {"name": "North Face", "type": "company"}
+      ]
+      Message: "#{message}"
+    PROMPT
+
+    response = @client.chat(
+      parameters: {
+        model: chosen_model,
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.7
+      }
+    )
+
+    result = response.dig("choices", 0, "message", "content").strip
+
+    begin
+      entities = JSON.parse(result)
+      return entities
+    rescue JSON::ParserError
+      return []
+    end
+  end
 end

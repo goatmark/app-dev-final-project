@@ -1,29 +1,34 @@
-<!--app/views/main_templates/processing.html.erb -->
 <h1>Dictation App: Confirmation</h1>
 <hr>
 
-<%if @result == "note" || @result == "task"%>
+<% case @result %>
+<% when "note" %>
+  <div><b>Note title: </b><%= @title %></div>
+  <div><b>Note body: </b><%= @body %></div>
+  <div><b>Note date: </b><%= @todays_date %></div>
+<% when "task" %>
+  <div><b>Task: </b><%= @task %></div>
+  <div><b>Deadline: </b><%= @deadline %></div>
+  <div><b>Action Date: </b><%= @action_date %></div>
+<% else %>
+  <div>Unknown result type.</div>
+<% end %>
 
-  <%if @result == "note"%>
-    <div><b>Note title: </b><%=@title%></div>
-    <div><b>Note body: </b><%=@body%></div>
-    <div><b>Note date: </b><%=@todays_date%></div>
-  <%elsif @result == "task"%>
-    <div><b>Task: </b><%=@task%></div>
-    <div><b>Deadline: </b><%=@deadline%></div>
-    <div><b>Action Date: </b><%=@action_date%><div>
-  <%else%>
-  <%end%>
-      
-  <hr>
+<% if @related_entities.present? %>
+  <h3>Related Entities:</h3>
+  <ul>
+    <% @related_entities.each do |entity| %>
+      <li><b><%= entity['type'].capitalize %>:</b> <%= entity['name'] %></li>
+    <% end %>
+  </ul>
+<% end %>
 
-  <form action="/confirm" method="post">
-    <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
-    <button>Confirm</button>
-  </form>
-  
-<%else%>
-<%end%>
+<hr>
 
-<h2>Chosen Prompt</h2>
-<%=@note%>
+<form action="/confirm" method="post">
+  <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+  <button>Confirm</button>
+</form>
+
+<h2>Original Input</h2>
+<p><%= @note %></p>

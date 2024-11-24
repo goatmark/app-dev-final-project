@@ -1,8 +1,10 @@
-<!-- app/views/main_templates/home.html.erb -->
 <h1>Dictation App</h1>
 
-<% if flash[:notice] %>
-  <p style="color: darkblue;"><%= flash[:notice] %></p>
+<% if @action_log.present? %>
+  <div style="background-color: #f0f8ff; padding: 10px; border-radius: 5px;">
+    <h3>Action Log:</h3>
+    <pre><%= @action_log %></pre>
+  </div>
 <% elsif flash[:alert] %>
   <p style="color: red;"><%= flash[:alert] %></p>
 <% end %>
@@ -21,6 +23,13 @@
   <br>
   <button type="submit">Submit</button>
 </form>
+
+<h3>Example prompts</h3>
+<ol>
+<li>I need to add cumin to my shopping list</li>
+<li>I spoke to Lydia Wang from my Digital Marketing class. We both have to finish the social media ads.</li>
+<li>I had a brilliant conversation with Professor Lil Mohan. We had a great conversation about the deterioriation of incoming MBA students, year over year.</li>
+</ol>
 
 <script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script>
 <script>
