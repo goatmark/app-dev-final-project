@@ -21,7 +21,10 @@ class OpenaiService
       parameters: {
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Return only 'note' or 'task' without quotes to best classify the message (reminders are tasks). Never respond otherwise." },
+          {
+            role: "system",
+            content: "Return only one of 'note', 'task', 'ingredient', or 'recipe' without quotes to best classify the message. Never respond otherwise."
+          },
           { role: "user", content: message }
         ],
         temperature: 0
@@ -56,7 +59,7 @@ class OpenaiService
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: "Return only the deadline knowing today is #{dow}, #{todays_date}. (e.g., if something says it's due Tuesday, assume it's due the first Tuesday after #{todays_date}). If no deadline specified, return #{tomorrow_date}. If something is to be done 'today', return #{todays_date}. If something is due 'next week', assume a 7-day deadline from today. If something is due 'next month', assume a deadline a full calendar month from today. Strictly always respond in 'YYYY-MM-DD' format without quotes. Assume something to be done 'end of the week' is due Friday." },
-              { role: "user", content: message }
+          { role: "user", content: message }
         ],
         temperature: 0.7
       }
@@ -119,6 +122,7 @@ class OpenaiService
       Do not include generic terms or groups like "MBA students" or "students".
       For each entity, identify its type as one of: "person", "class", or "company".
       Return the results in JSON format as an array of objects with "name" and "type" keys.
+      **Do not include any code block markers, triple backticks, or any additional text before or after the JSON.**
       Example:
       [
         {"name": "Mitch Matthews", "type": "person"},
@@ -141,8 +145,12 @@ class OpenaiService
     # Log the API response for debugging
     @last_api_response = response.dig("choices", 0, "message", "content").strip
 
+    # Remove any code block markers or extra whitespace
+    json_str = @last_api_response.strip
+    json_str = json_str.gsub(/```(?:json)?/, '').strip
+
     begin
-      entities = JSON.parse(@last_api_response)
+      entities = JSON.parse(json_str)
       return entities
     rescue JSON::ParserError => e
       # Handle parsing errors
@@ -193,5 +201,90 @@ class OpenaiService
     regex = Regexp.union(titles.map { |t| /\b#{Regexp.escape(t)}\b/i })
     cleaned_term = search_term.gsub(regex, '').strip
     return cleaned_term
+  end
+
+  def extract_ingredients(message:)
+    prompt = <<~PROMPT
+      From the following message, extract all ingredients and their quantities to add to the shopping list.
+      - Return the results in JSON format as an array of objects with "name" and "quantity" keys.
+      - If no quantity is specified, default the quantity to 1.
+      - Quantities should be integers.
+      - Do not include any code block markers or additional text.
+
+      Example:
+      [
+        {"name": "Onions", "quantity": 1},
+        {"name": "Garlic Cloves", "quantity": 2},
+        {"name": "Cinnamon", "quantity": 1},
+        {"name": "Parsley", "quantity": 1}
+      ]
+
+      Message: "#{message}"
+    PROMPT
+
+    response = @client.chat(
+      parameters: {
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.7
+      }
+    )
+
+    @last_api_response = response.dig("choices", 0, "message", "content").strip
+
+    # Remove code block markers if present
+    json_str = @last_api_response.gsub(/```(?:json)?/, '').strip
+
+    begin
+      ingredients = JSON.parse(json_str)
+      return ingredients
+    rescue JSON::ParserError => e
+      puts "JSON Parsing Error: #{e.message}"
+      puts "Response was: #{@last_api_response}"
+      return []
+    end
+  end
+
+  def extract_recipes(message:)
+    prompt = <<~PROMPT
+      From the following message, extract all recipe names that should be added to the plan.
+      - Return the results in JSON format as an array of recipe names.
+      - Do not include any code block markers or additional text.
+
+      Example:
+      [
+        "Leek & Bacon Risotto",
+        "Maroulosalata",
+        "Mediterranean Tzatziki Breakfast Wrap"
+      ]
+
+      Message: "#{message}"
+    PROMPT
+
+    response = @client.chat(
+      parameters: {
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.7
+      }
+    )
+
+    @last_api_response = response.dig("choices", 0, "message", "content").strip
+
+    # Remove code block markers if present
+    json_str = @last_api_response.gsub(/```(?:json)?/, '').strip
+
+    begin
+      recipes = JSON.parse(json_str)
+      return recipes
+    rescue JSON::ParserError => e
+      puts "JSON Parsing Error: #{e.message}"
+      puts "Response was: #{@last_api_response}"
+      return []
+    end
   end
 end

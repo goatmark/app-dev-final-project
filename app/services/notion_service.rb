@@ -4,188 +4,78 @@ class NotionService
   attr_reader :action_log
 
   # Database IDs
-  NOTES_DB_ID = ENV.fetch("NOTES_DB_KEY")
-  TASKS_DB_ID = ENV.fetch("TASKS_DB_KEY")
-  PEOPLE_DB_ID = ENV.fetch("PEOPLE_DB_KEY")
-  CLASSES_DB_ID = ENV.fetch("CLASSES_DB_KEY")
-  COMPANIES_DB_ID = ENV.fetch("COMPANIES_DB_KEY")
-  INGREDIENTS_DB_ID = ENV.fetch("INGREDIENTS_DB_KEY")
-  RECIPES_DB_ID = ENV.fetch("RECIPES_DB_KEY")
+  DATABASES = {
+    notes: ENV.fetch("NOTES_DB_KEY"),
+    tasks: ENV.fetch("TASKS_DB_KEY"),
+    people: ENV.fetch("PEOPLE_DB_KEY"),
+    classes: ENV.fetch("CLASSES_DB_KEY"),
+    companies: ENV.fetch("COMPANIES_DB_KEY"),
+    ingredients: ENV.fetch("INGREDIENTS_DB_KEY"),
+    recipes: ENV.fetch("RECIPES_DB_KEY")
+  }.freeze
 
-  # For Notes
-  NOTES_TITLE_PROPERTY = 'Name'
-  NOTES_RELATIONS = {
-    'People' => PEOPLE_DB_ID,
-    'Company' => COMPANIES_DB_ID,
-    'Course' => CLASSES_DB_ID
-  }
-
-  # For Tasks
-  TASKS_TITLE_PROPERTY = 'Name'
-  TASKS_RELATIONS = {
-    'People' => PEOPLE_DB_ID,
-    'Organization' => COMPANIES_DB_ID,
-    'Course' => CLASSES_DB_ID
-  }
+  # Schema Definitions
+  SCHEMA = {
+    notes: {
+      title: { name: 'Meeting', type: 'title' },
+      date: { name: 'Date', type: 'date' },
+      relations: {
+        people: { name: 'People', type: 'relation', database: :people },
+        company: { name: 'Company', type: 'relation', database: :companies },
+        course: { name: 'Course', type: 'relation', database: :classes }
+      }
+    },
+    tasks: {
+      title: { name: 'Name', type: 'title' },
+      deadline: { name: 'Deadline', type: 'date' },
+      action_date: { name: 'Action Date', type: 'date' },
+      status: { name: 'Status', type: 'status' },
+      relations: {
+        people: { name: 'People', type: 'relation', database: :people },
+        organization: { name: 'Organization', type: 'relation', database: :companies },
+        course: { name: 'Course', type: 'relation', database: :classes }
+      }
+    },
+    ingredients: {
+      title: { name: 'Ingredient', type: 'title' },
+      amount_needed: { name: 'Amount Needed', type: 'number' },
+      relations: {
+        company: { name: 'Company', type: 'relation', database: :companies }
+      }
+    },
+    recipes: {
+      title: { name: 'Name', type: 'title' },
+      planned: { name: 'Planned', type: 'checkbox' },
+      relations: {
+        company: { name: 'Company', type: 'relation', database: :companies }
+      }
+    },
+    people: {
+      title: { name: 'Name', type: 'title' }
+    },
+    classes: {
+      title: { name: 'Course Title', type: 'title' }
+    },
+    companies: {
+      title: { name: 'Name', type: 'title' }
+    }
+  }.freeze
 
   def initialize
     @client = Notion::Client.new
     @action_log = []
   end
 
-  def add_note(title:, body:, date:)
-    properties = {
-      NOTES_TITLE_PROPERTY => {
-        'title' => [
-          {
-            'text' => {
-              'content' => title
-            }
-          }
-        ]
-      },
-      'Date' => {
-        'date' => {
-          'start' => date
-        }
-      }
-    }
+  # General method to find a page by title
+  # General method to find a page by title
+  def find_page_by_title(database_key, title)
+    database_id = DATABASES[database_key]
+    title_property = SCHEMA[database_key][:title][:name]
 
-    # Define the content of the page as children blocks
-    children = [
-      {
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text',
-              text: {
-                content: body
-              }
-            }
-          ]
-        }
-      }
-    ]
-
-    response = @client.create_page(
-      parent: { database_id: NOTES_DB_ID },
-      properties: properties,
-      children: children
-    )
-
-    @action_log << "Created new Note '#{title}'."
-
-    return response
-  end
-
-  def add_task(name:, deadline:, action_date:)
-    properties = {
-      TASKS_TITLE_PROPERTY => {
-        'title' => [
-          {
-            'text' => {
-              'content' => name
-            }
-          }
-        ]
-      },
-      'Deadline' => {
-        'date' => {
-          'start' => deadline
-        }
-      },
-      'Action Date' => {
-        'date' => {
-          'start' => action_date
-        }
-      },
-      'Status' => {
-        'status' => {
-          'name' => 'Next'
-        }
-      }
-    }
-
-    response = @client.create_page(
-      parent: { database_id: TASKS_DB_ID },
-      properties: properties
-    )
-
-    @action_log << "Created new Task '#{name}'."
-
-    return response
-  end
-
-  def add_relations_to_page(page_id:, relations_hash:)
-    properties = {}
-
-    relations_hash.each do |relation_field, page_ids|
-      properties[relation_field] = {
-        'relation' => page_ids.map { |id| { 'id' => id } }
-      }
-    end
-
-    @client.update_page(
-      page_id: page_id,
-      properties: properties
-    )
-
-    @action_log << "Added relations to page ID '#{page_id}'."
-  end
-
-  def find_or_create_entity(name:, relation_field:)
-    db_id = NOTES_RELATIONS[relation_field] || TASKS_RELATIONS[relation_field]
-    return nil, nil unless db_id
-
-    # Set the correct title property for each database
-    title_property = 'Name' # Adjust if your databases use a different title property
-
-    type = get_entity_type_for_relation_field(relation_field)
-
-    # Clean the search term
-    openai_service = OpenaiService.new
-    cleaned_name = openai_service.clean_search_term(name)
-
-    # Try direct match with cleaned name
-    page_id = search_page_by_title(database_id: db_id, page_title: cleaned_name, title_property: title_property)
-
-    if page_id
-      match_type = 'direct'
-      @action_log << "Directly matched '#{cleaned_name}' to existing #{type} page."
-    else
-      # Get all titles from the database
-      titles = get_all_titles_from_database(database_id: db_id, title_property: title_property)
-
-      # Try indirect match using OpenAI with cleaned name
-      best_match = openai_service.find_best_match(search_term: cleaned_name, options: titles)
-
-      if best_match
-        # Find the page ID of the best match
-        matched_page_id = search_page_by_title(database_id: db_id, page_title: best_match.strip, title_property: title_property)
-        if matched_page_id
-          page_id = matched_page_id
-          match_type = 'indirect'
-          @action_log << "Indirectly matched '#{cleaned_name}' to '#{best_match}' in #{type.capitalize} database."
-        else
-          match_type = 'no_match'
-          @action_log << "No matching page found for '#{cleaned_name}' in #{type.capitalize} database."
-        end
-      else
-        match_type = 'no_match'
-        @action_log << "No matching page found for '#{cleaned_name}' in #{type.capitalize} database."
-      end
-    end
-
-    return page_id, match_type
-  end
-
-  def search_page_by_title(database_id:, page_title:, title_property:)
     filter = {
       property: title_property,
       title: {
-        equals: page_title
+        equals: title
       }
     }
 
@@ -196,47 +86,174 @@ class NotionService
 
     if response && response['results'] && !response['results'].empty?
       page = response['results'].first
-      page_id = page['id']
-      return page_id
+      return page
     else
       return nil
     end
+  rescue Notion::Api::Errors::NotionError => e
+    @action_log << "Error querying database #{database_key}: #{e.message}"
+    return nil
   end
 
-  def get_all_titles_from_database(database_id:, title_property:)
-    pages = []
+  # General Method to Retrieve a Property Value from a Page
+  def get_property_value(page:, property_name:)
+    property = page['properties'][property_name] rescue nil
+    return nil unless property
+
+    case property['type']
+    when 'number'
+      return property['number']
+    when 'checkbox'
+      return property['checkbox']
+    when 'title'
+      return property['title'].map { |t| t['plain_text'] }.join
+    else
+      nil
+    end
+  end
+
+  # General method to update page properties
+  def update_page_properties(page_id, properties)
+    @client.update_page(
+      page_id: page_id,
+      properties: properties
+    )
+  rescue Notion::Api::Errors::NotionError => e
+    @action_log << "Error updating page #{page_id}: #{e.message}"
+  end
+
+  # Method to construct property value based on type
+  def construct_property_value(type, value)
+    case type
+    when 'title'
+      { 'title' => [{ 'text' => { 'content' => value } }] }
+    when 'number'
+      { 'number' => value }
+    when 'checkbox'
+      { 'checkbox' => value }
+    when 'date'
+      { 'date' => { 'start' => value } }
+    when 'relation'
+      { 'relation' => value.map { |id| { 'id' => id } } }
+    when 'status'
+      { 'status' => { 'name' => value } }
+    else
+      {}
+    end
+  end
+
+  # Method to find or create an entity with direct and indirect matching
+  def find_or_create_entity(name:, relation_field:)
+    db_key = relation_field.to_sym
+    page = find_page_by_title(db_key, name)
+
+    if page
+      return [page['id'], 'direct']
+    else
+      # Indirect matching using best match
+      titles = get_all_titles_from_database(db_key)
+      best_match = find_best_match(search_term: name, options: titles)
+
+      if best_match && best_match != "No match"
+        matched_page = find_page_by_title(db_key, best_match)
+        if matched_page
+          return [matched_page['id'], 'indirect']
+        end
+      end
+
+      # If no match found, create new entity
+      new_page = create_entity(db_key, name)
+      return [new_page['id'], 'created']
+    end
+  end
+
+  # Helper method to get all titles from a database
+  def get_all_titles_from_database(database_key)
+    database_id = DATABASES[database_key]
+    title_property = SCHEMA[database_key][:title][:name]
+
+    titles = []
     start_cursor = nil
     loop do
-      response = @client.database_query(database_id: database_id, start_cursor: start_cursor, page_size: 100)
-      pages += response['results']
+      params = { database_id: database_id, page_size: 100 }
+      params[:start_cursor] = start_cursor if start_cursor
+
+      response = @client.database_query(**params)
+      response['results'].each do |page|
+        title = get_property_value(page: page, property_name: title_property)
+        titles << title if title
+      end
       start_cursor = response['next_cursor']
       break unless start_cursor
     end
 
-    titles = pages.map do |page|
-      extract_title_from_page(page: page, title_property: title_property)
+    titles
+  end
+
+  # Helper method to find the best match using OpenAI
+  def find_best_match(search_term:, options:)
+    openai_service = OpenaiService.new
+    openai_service.find_best_match(search_term: search_term, options: options)
+  end
+
+  # Helper method to create a new entity
+  def create_entity(database_key, name)
+    title_property = SCHEMA[database_key][:title]
+    properties = {
+      title_property[:name] => construct_property_value(title_property[:type], name)
+    }
+
+    response = @client.create_page(
+      parent: { database_id: DATABASES[database_key] },
+      properties: properties
+    )
+
+    @action_log << "Created new #{database_key.to_s.capitalize} '#{name}'."
+    response
+  end
+
+  # Method to update multiple ingredients with matching info
+  def update_ingredients(ingredients)
+    ingredients.each do |ingredient|
+      name = ingredient['name']
+      quantity_to_add = ingredient['quantity'].to_i
+
+      page_id, match_type = find_or_create_entity(name: name, relation_field: :ingredients)
+
+      if page_id
+        current_amount = get_property_value(page: page_id, property_name: 'Amount Needed') || 0
+        new_amount = current_amount + quantity_to_add
+
+        properties = {
+          'Amount Needed' => construct_property_value('number', new_amount)
+        }
+
+        update_page_properties(page_id, properties)
+        ingredient['page_id'] = page_id
+        ingredient['match_type'] = match_type
+        @action_log << "Updated '#{name}' amount to #{new_amount}."
+      else
+        @action_log << "Failed to process ingredient '#{name}'."
+      end
     end
-
-    return titles.compact.uniq
   end
 
-  def extract_title_from_page(page:, title_property:)
-    title_data = page['properties'][title_property]['title']
-    return nil unless title_data
-    title_text = title_data.map { |t| t['plain_text'] }.join
-    return title_text.strip
-  end
 
-  def get_entity_type_for_relation_field(relation_field)
-    case relation_field
-    when 'People'
-      'person'
-    when 'Company', 'Organization'
-      'company'
-    when 'Course'
-      'class'
-    else
-      nil
+  # Method to update multiple recipes as planned with matching info
+  def update_recipes(recipes)
+    recipes.each do |recipe|
+      page_id, match_type = find_or_create_entity(name: recipe, relation_field: :recipes)
+
+      if page_id
+        properties = {
+          'Planned' => construct_property_value('checkbox', true)
+        }
+
+        update_page_properties(page_id, properties)
+        @action_log << "Marked recipe '#{recipe}' as planned. (Page ID: #{page_id}, Match Type: #{match_type})"
+      else
+        @action_log << "Failed to process recipe '#{recipe}'."
+      end
     end
   end
 end

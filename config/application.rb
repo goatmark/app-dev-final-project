@@ -36,5 +36,8 @@ module RailsTemplate
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # Set timezone to Central Time (US & Canada)
+    config.time_zone = 'Central Time (US & Canada)'
   end
 end

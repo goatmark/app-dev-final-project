@@ -1,3 +1,5 @@
+<!-- app/views/main_templates/processing.html.erb -->
+
 <h1>Dictation App: Confirmation</h1>
 <hr>
 
@@ -9,18 +11,30 @@
   <div><b>Task: </b><%= @task %></div>
   <div><b>Deadline: </b><%= @deadline %></div>
   <div><b>Action Date: </b><%= @action_date %></div>
-<% else %>
-  <div>Unknown result type.</div>
-<% end %>
-
-<% if @related_entities.present? %>
-  <h3>Related Entities:</h3>
+<% elsif @result == 'ingredient' %>
+  <h2>Ingredients to Add:</h2>
   <ul>
-    <% @related_entities.each do |entity| %>
+    <% @ingredients.each do |ingredient| %>
       <li>
-        <b><%= entity['type'].capitalize %>:</b> <%= entity['name'] %>
-        <% if entity[:page_id] %>
-          (Page ID: <%= entity[:page_id] %>, Match Type: <%= entity[:match_type] %>)
+        <b>Name:</b> <%= ingredient['name'] %>, 
+        <b>Quantity:</b> <%= ingredient['quantity'] %>
+        <% if ingredient['page_id'] && ingredient['match_type'] %>
+          (Page ID: <%= ingredient['page_id'] %>, Match Type: <%= ingredient['match_type'] %>)
+        <% else %>
+          (No matching page found)
+        <% end %>
+      </li>
+    <% end %>
+  </ul>
+<% elsif @result == 'recipe' %>
+  <h2>Recipes to Plan:</h2>
+  <ul>
+    <% @recipes.each do |recipe| %>
+      <li>
+        <%= recipe %>
+        <% related = @related_entities.find { |e| e['name'] == recipe } %>
+        <% if related && related['page_id'] && related['match_type'] %>
+          (Page ID: <%= related['page_id'] %>, Match Type: <%= related['match_type'] %>)
         <% else %>
           (No matching page found)
         <% end %>
@@ -28,33 +42,104 @@
     <% end %>
   </ul>
 <% else %>
+  <div>Unknown result type.</div>
+<% end %>
+
+<!-- Add hidden fields for ingredients or recipes -->
+<form action="/confirm" method="post">
+  <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+  <% if @result == 'ingredient' %>
+    <input type="hidden" name="ingredients" value='<%= @ingredients.to_json %>'>
+  <% elsif @result == 'recipe' %>
+    <input type="hidden" name="recipes" value='<%= @recipes.to_json %>'>
+  <% elsif @result == 'note' %>
+    <input type="hidden" name="title" value="<%= @title %>">
+    <input type="hidden" name="body" value="<%= @body %>">
+    <% if @related_entities.present? %>
+      <input type="hidden" name="related_entities" value='<%= @related_entities.to_json %>'>
+    <% end %>
+  <% elsif @result == 'task' %>
+    <input type="hidden" name="task" value="<%= @task %>">
+    <input type="hidden" name="deadline" value="<%= @deadline %>">
+    <input type="hidden" name="action_date" value="<%= @action_date %>">
+    <% if @related_entities.present? %>
+      <input type="hidden" name="related_entities" value='<%= @related_entities.to_json %>'>
+    <% end %>
+  <% end %>
+  <input type="hidden" name="result" value="<%= @result %>">
+  <button>Confirm</button>
+</form>
+
+<% if @result == 'ingredient' || @result == 'recipe' %>
   <h3>Related Entities:</h3>
-  <p>No entities extracted.</p>
+  <% if @result == 'ingredient' && @ingredients.any? { |ing| ing['page_id'].present? } || @result == 'recipe' && @related_entities.any? { |e| e['name'] == e['name'] && e['page_id'].present? } %>
+    <ul>
+      <% if @result == 'ingredient' %>
+        <% @ingredients.each do |ingredient| %>
+          <li>
+            <b><%= ingredient['name'] %>:</b>
+            <% if ingredient['page_id'] && ingredient['match_type'] %>
+              (Page ID: <%= ingredient['page_id'] %>, Match Type: <%= ingredient['match_type'] %>)
+            <% else %>
+              (No matching page found)
+            <% end %>
+          </li>
+        <% end %>
+      <% elsif @result == 'recipe' %>
+        <% @recipes.each do |recipe| %>
+          <% related = @related_entities.find { |e| e['name'] == recipe } %>
+          <li>
+            <b><%= recipe %>:</b>
+            <% if related && related['page_id'] && related['match_type'] %>
+              (Page ID: <%= related['page_id'] %>, Match Type: <%= related['match_type'] %>)
+            <% else %>
+              (No matching page found)
+            <% end %>
+          </li>
+        <% end %>
+      <% end %>
+    </ul>
+  <% else %>
+    <p>No entities extracted.</p>
+  <% end %>
+<% elsif @related_entities.present? %>
+  <h3>Related Entities:</h3>
+  <ul>
+    <% @related_entities.each do |entity| %>
+      <li>
+        <b><%= entity['type'].capitalize %>:</b> <%= entity['name'] %>
+        <% if entity['page_id'] && entity['match_type'] %>
+          (Page ID: <%= entity['page_id'] %>, Match Type: <%= entity['match_type'] %>)
+        <% else %>
+          (No matching page found)
+        <% end %>
+      </li>
+    <% end %>
+  </ul>
+<% else %>
+  <% if @result == 'note' || @result == 'task' %>
+    <h3>Related Entities:</h3>
+    <p>No entities extracted.</p>
+  <% end %>
 <% end %>
 
 <h3>Debugging Information</h3>
 <pre>
 Result: <%= @result %>
+<% if @related_entities.present? %>
 Extracted Entities: <%= @related_entities.inspect %>
+<% end %>
 OpenAI API Response: <%= @api_response %>
+Note: <%= @note %>
+Title: <%= @title %>
+Body: <%= @body %>
+Task: <%= @task %>
+Deadline: <%= @deadline %>
+Action Date: <%= @action_date %>
+Skip Confirmation: <%= @skip_confirmation %>
 </pre>
 
 <hr>
-
-<form action="/confirm" method="post">
-  <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
-  <% if @result == 'task' %>
-    <input type="hidden" name="task" value="<%= @task %>">
-    <input type="hidden" name="deadline" value="<%= @deadline %>">
-    <input type="hidden" name="action_date" value="<%= @action_date %>">
-  <% elsif @result == 'note' %>
-    <input type="hidden" name="title" value="<%= @title %>">
-    <input type="hidden" name="body" value="<%= @body %>">
-  <% end %>
-  <input type="hidden" name="result" value="<%= @result %>">
-  <input type="hidden" name="related_entities" value='<%= @related_entities.to_json %>'>
-  <button>Confirm</button>
-</form>
 
 <h2>Original Input</h2>
 <p><%= @note %></p>

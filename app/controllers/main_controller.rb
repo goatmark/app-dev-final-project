@@ -27,6 +27,10 @@ class MainController < ApplicationController
       process_note
     when "task"
       process_task
+    when "ingredient"
+      process_ingredients
+    when "recipe"
+      process_recipes
     else
       redirect_to "/", alert: "Could not classify the transcription."
     end
@@ -34,23 +38,34 @@ class MainController < ApplicationController
 
   def confirm
     @result = params[:result]
-    @todays_date = Date.today.strftime("%Y-%m-%d")
     notion_service = NotionService.new
-  
+
     case @result
     when "note"
       @title = params[:title]
       @body = params[:body]
-      @related_entities = JSON.parse(params[:related_entities])
-      process_entities(notion_service, nil, 'note')
-      render template: "main_templates/processing"
+      @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
+      create_note_in_notion(notion_service)
+      flash[:notice] = notion_service.action_log.join("\n")
+      redirect_to "/"
     when "task"
       @task = params[:task]
       @deadline = params[:deadline]
       @action_date = params[:action_date]
-      @related_entities = JSON.parse(params[:related_entities])
-      process_entities(notion_service, nil, 'task')
-      render template: "main_templates/processing"
+      @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
+      create_task_in_notion(notion_service)
+      flash[:notice] = notion_service.action_log.join("\n")
+      redirect_to "/"
+    when "ingredient"
+      @ingredients = params[:ingredients].present? ? JSON.parse(params[:ingredients]) : []
+      notion_service.update_ingredients(@ingredients)
+      flash[:notice] = notion_service.action_log.join("\n")
+      redirect_to "/"
+    when "recipe"
+      @recipes = params[:recipes].present? ? JSON.parse(params[:recipes]) : []
+      notion_service.update_recipes(@recipes)
+      flash[:notice] = notion_service.action_log.join("\n")
+      redirect_to "/"
     else
       flash[:alert] = "Unknown result type."
       redirect_to "/"
@@ -82,7 +97,7 @@ class MainController < ApplicationController
           render json: { success: false, error: result[:error] }
         end
       else
-        # Non-hardcore mode: return transcription for manual submission
+        # Non-confirmation mode: return transcription for manual submission
         render json: { transcription: transcription }
       end
     else
@@ -98,8 +113,10 @@ class MainController < ApplicationController
 
     @body = openai_service.extract_note_body(message: @note)
     @title = openai_service.extract_note_title(message: @note)
-    @related_entities = openai_service.extract_related_entities(message: @note)
+    @related_entities = openai_service.extract_related_entities(message: @note) || []
     @api_response = openai_service.get_last_api_response
+
+    process_entities(notion_service, nil, 'note')
 
     if @skip_confirmation
       create_note_in_notion(notion_service)
@@ -117,11 +134,49 @@ class MainController < ApplicationController
     @task = openai_service.extract_task_summary(message: @note)
     @deadline = openai_service.extract_deadline(message: @note)
     @action_date = openai_service.extract_action_date(message: @note)
-    @related_entities = openai_service.extract_related_entities(message: @note)
+    @related_entities = openai_service.extract_related_entities(message: @note) || []
     @api_response = openai_service.get_last_api_response
+
+    process_entities(notion_service, nil, 'task')
 
     if @skip_confirmation
       create_task_in_notion(notion_service)
+      flash[:notice] = notion_service.action_log.join("\n")
+      redirect_to "/"
+    else
+      render template: "main_templates/processing"
+    end
+  end
+
+  def process_ingredients
+    openai_service = OpenaiService.new
+    notion_service = NotionService.new
+
+    @ingredients = openai_service.extract_ingredients(message: @note) || []
+    @api_response = openai_service.get_last_api_response
+
+    # Process ingredients to update quantities and get matching info
+    notion_service.update_ingredients(@ingredients)
+
+    if @skip_confirmation
+      flash[:notice] = notion_service.action_log.join("\n")
+      redirect_to "/"
+    else
+      render template: "main_templates/processing"
+    end
+  end
+
+  def process_recipes
+    openai_service = OpenaiService.new
+    notion_service = NotionService.new
+
+    @recipes = openai_service.extract_recipes(message: @note) || []
+    @api_response = openai_service.get_last_api_response
+
+    # Process recipes to mark as planned and get matching info
+    notion_service.update_recipes(@recipes)
+
+    if @skip_confirmation
       flash[:notice] = notion_service.action_log.join("\n")
       redirect_to "/"
     else
@@ -144,18 +199,17 @@ class MainController < ApplicationController
     @related_entities.each do |entity|
       relation_field = get_relation_field_for_entity_type(entity['type'], item_type)
       next unless relation_field
-  
+
       page_id_entity, match_type = notion_service.find_or_create_entity(name: entity['name'], relation_field: relation_field)
       relations_hash[relation_field] ||= []
       relations_hash[relation_field] << page_id_entity if page_id_entity
-  
-      # Update the entity hash with matching information
-      entity[:page_id] = page_id_entity
-      entity[:match_type] = match_type
+
+      entity['page_id'] = page_id_entity
+      entity['match_type'] = match_type
     end
-  
-    if page_id
-      notion_service.add_relations_to_page(page_id: page_id, relations_hash: relations_hash) if relations_hash.any?
+
+    if page_id && relations_hash.any?
+      notion_service.add_relations_to_page(page_id: page_id, relations_hash: relations_hash)
     end
   end
 
@@ -183,6 +237,18 @@ class MainController < ApplicationController
       create_task_in_notion(notion_service)
       message = notion_service.action_log.join("\n")
       { success: true, message: message }
+    when "ingredient"
+      @ingredients = openai_service.extract_ingredients(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      notion_service.update_ingredients(@ingredients)
+      flash[:notice] = notion_service.action_log.join("\n")
+      { success: true, message: notion_service.action_log.join("\n") }
+    when "recipe"
+      @recipes = openai_service.extract_recipes(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      notion_service.update_recipes(@recipes)
+      flash[:notice] = notion_service.action_log.join("\n")
+      { success: true, message: notion_service.action_log.join("\n") }
     else
       { success: false, error: 'Could not classify the transcription.' }
     end
@@ -203,6 +269,14 @@ class MainController < ApplicationController
         'person' => 'People',
         'company' => 'Organization',
         'class' => 'Course'
+      }[entity_type]
+    elsif item_type == 'ingredient'
+      {
+        'company' => 'Company'
+      }[entity_type]
+    elsif item_type == 'recipe'
+      {
+        'company' => 'Company'
       }[entity_type]
     else
       nil
