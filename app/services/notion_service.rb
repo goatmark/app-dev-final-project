@@ -173,11 +173,11 @@ class NotionService
   
     # Pluralize the item_type to match SCHEMA keys
     plural_item_type = item_type.pluralize.to_sym
-
+  
     relations_hash.each do |relation_field, page_ids|
       # Fetch the correct property name from the SCHEMA using plural_item_type
       property_schema = SCHEMA[plural_item_type]&.dig(:relations, relation_field)
-
+  
       if property_schema && property_schema[:name]
         property_name = property_schema[:name]
         properties[property_name] = {
