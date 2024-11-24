@@ -268,8 +268,8 @@ class MainController < ApplicationController
     elsif item_type == 'task'
       {
         'person' => :people,
-        'company' => :organization,
-        'class' => :class
+        'company' => :companies,
+        'class' => :classes
       }[entity_type]
     elsif item_type == 'ingredient'
       {

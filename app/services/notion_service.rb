@@ -32,8 +32,8 @@ class NotionService
       status: { name: 'Status', type: 'status' },
       relations: {
         people: { name: 'People', type: 'relation', database: :people },
-        organization: { name: 'Organization', type: 'relation', database: :companies },
-        class: { name: 'Course', type: 'relation', database: :classes }
+        company: { name: 'Company', type: 'relation', database: :companies },
+        class: { name: 'Class', type: 'relation', database: :classes }
       }
     },
     ingredients: {
