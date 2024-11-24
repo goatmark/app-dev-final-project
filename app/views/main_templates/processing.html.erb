@@ -55,6 +55,7 @@
   <% elsif @result == 'note' %>
     <input type="hidden" name="title" value="<%= @title %>">
     <input type="hidden" name="body" value="<%= @body %>">
+    <input type="hidden" name="date" value="<%= @todays_date %>">
     <% if @related_entities.present? %>
       <input type="hidden" name="related_entities" value='<%= @related_entities.to_json %>'>
     <% end %>

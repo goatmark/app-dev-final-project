@@ -44,6 +44,7 @@ class MainController < ApplicationController
     when "note"
       @title = params[:title]
       @body = params[:body]
+      @date = params[:todays_date]
       @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
       create_note_in_notion(notion_service)
       flash[:notice] = notion_service.action_log.join("\n")
@@ -185,12 +186,12 @@ class MainController < ApplicationController
   end
 
   def create_note_in_notion(notion_service)
-    new_note = notion_service.add_note(title: @title, body: @body, date: @todays_date)
+    new_note = notion_service.add_note(title: @title, body: @body, date: params[:date], relations: @related_entities)
     process_entities(notion_service, new_note['id'], 'note')
   end
 
   def create_task_in_notion(notion_service)
-    new_task = notion_service.add_task(name: @task, deadline: @deadline, action_date: @action_date)
+    new_task = notion_service.add_task(task_name: @task, deadline: @deadline, action_date: @action_date, relations: @related_entities)
     process_entities(notion_service, new_task['id'], 'task')
   end
 
@@ -209,7 +210,7 @@ class MainController < ApplicationController
     end
 
     if page_id && relations_hash.any?
-      notion_service.add_relations_to_page(page_id: page_id, relations_hash: relations_hash)
+      notion_service.add_relations_to_page(page_id: page_id, relations_hash: relations_hash, item_type: item_type)
     end
   end
 
@@ -260,23 +261,23 @@ class MainController < ApplicationController
   def get_relation_field_for_entity_type(entity_type, item_type)
     if item_type == 'note'
       {
-        'person' => 'People',
-        'company' => 'Company',
-        'class' => 'Course'
+        'person' => :people,
+        'company' => :companies,
+        'class' => :classes
       }[entity_type]
     elsif item_type == 'task'
       {
-        'person' => 'People',
-        'company' => 'Organization',
-        'class' => 'Course'
+        'person' => :people,
+        'company' => :organization,
+        'class' => :class
       }[entity_type]
     elsif item_type == 'ingredient'
       {
-        'company' => 'Company'
+        'company' => :companies
       }[entity_type]
     elsif item_type == 'recipe'
       {
-        'company' => 'Company'
+        'company' => :companies
       }[entity_type]
     else
       nil
