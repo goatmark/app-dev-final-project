@@ -21,8 +21,8 @@ class NotionService
       date: { name: 'Date', type: 'date' },
       relations: {
         people: { name: 'People', type: 'relation', database: :people },
-        company: { name: 'Companies', type: 'relation', database: :companies },
-        class: { name: 'Classes', type: 'relation', database: :classes }
+        companies: { name: 'Company', type: 'relation', database: :companies },
+        classes: { name: 'Class', type: 'relation', database: :classes }
       }
     },
     tasks: {
@@ -32,8 +32,8 @@ class NotionService
       status: { name: 'Status', type: 'status' },
       relations: {
         people: { name: 'People', type: 'relation', database: :people },
-        company: { name: 'Companies', type: 'relation', database: :companies },
-        class: { name: 'Classes', type: 'relation', database: :classes }
+        companies: { name: 'Company', type: 'relation', database: :companies },
+        classes: { name: 'Class', type: 'relation', database: :classes }
       }
     },
     ingredients: {
