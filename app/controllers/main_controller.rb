@@ -200,15 +200,15 @@ class MainController < ApplicationController
     @related_entities.each do |entity|
       relation_field = get_relation_field_for_entity_type(entity['type'], item_type)
       next unless relation_field
-
+  
       page_id_entity, match_type = notion_service.find_or_create_entity(name: entity['name'], relation_field: relation_field)
       relations_hash[relation_field] ||= []
       relations_hash[relation_field] << page_id_entity if page_id_entity
-
+  
       entity['page_id'] = page_id_entity
       entity['match_type'] = match_type
     end
-
+  
     if page_id && relations_hash.any?
       notion_service.add_relations_to_page(page_id: page_id, relations_hash: relations_hash, item_type: item_type)
     end

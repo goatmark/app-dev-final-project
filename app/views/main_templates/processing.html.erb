@@ -1,17 +1,17 @@
 <!-- app/views/main_templates/processing.html.erb -->
-<%=params%>
 <h1>Dictation App: Confirmation</h1>
 <hr>
 
-<% if @result == 'note' %>
+<% case @result %>
+<% when 'note' %>
   <div><b>Note title: </b><%= @title %></div>
   <div><b>Note body: </b><%= @body %></div>
   <div><b>Note date: </b><%= @todays_date %></div>
-<% elsif @result == 'task' %>
+<% when 'task' %>
   <div><b>Task: </b><%= @task %></div>
   <div><b>Deadline: </b><%= @deadline %></div>
   <div><b>Action Date: </b><%= @action_date %></div>
-<% elsif @result == 'ingredient' %>
+<% when 'ingredient' %>
   <h2>Ingredients to Add:</h2>
   <ul>
     <% @ingredients.each do |ingredient| %>
@@ -26,7 +26,7 @@
       </li>
     <% end %>
   </ul>
-<% elsif @result == 'recipe' %>
+<% when 'recipe' %>
   <h2>Recipes to Plan:</h2>
   <ul>
     <% @recipes.each do |recipe| %>
@@ -45,35 +45,36 @@
   <div>Unknown result type.</div>
 <% end %>
 
-<!-- Add hidden fields for ingredients or recipes -->
+<!-- Hidden Fields Form -->
 <form action="/confirm" method="post">
-  <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
-  <% if @result == 'ingredient' %>
-    <input type="hidden" name="ingredients" value='<%= @ingredients.to_json %>'>
-  <% elsif @result == 'recipe' %>
-    <input type="hidden" name="recipes" value='<%= @recipes.to_json %>'>
-  <% elsif @result == 'note' %>
-    <input type="hidden" name="title" value="<%= @title %>">
-    <input type="hidden" name="body" value="<%= @body %>">
-    <input type="hidden" name="date" value="<%= @todays_date %>">
-    <% if @related_entities.present? %>
-      <input type="hidden" name="related_entities" value='<%= @related_entities.to_json %>'>
-    <% end %>
-  <% elsif @result == 'task' %>
-    <input type="hidden" name="task" value="<%= @task %>">
-    <input type="hidden" name="deadline" value="<%= @deadline %>">
-    <input type="hidden" name="action_date" value="<%= @action_date %>">
-    <% if @related_entities.present? %>
-      <input type="hidden" name="related_entities" value='<%= @related_entities.to_json %>'>
-    <% end %>
+  <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+  
+  <% case @result %>
+  <% when 'ingredient' %>
+    <%= hidden_field_tag :ingredients, @ingredients.to_json %>
+  <% when 'recipe' %>
+    <%= hidden_field_tag :recipes, @recipes.to_json %>
+  <% when 'note' %>
+    <%= hidden_field_tag :title, @title %>
+    <%= hidden_field_tag :body, @body %>
+    <%= hidden_field_tag :todays_date, @todays_date %>
+    <%= hidden_field_tag :related_entities, @related_entities.to_json if @related_entities.present? %>
+  <% when 'task' %>
+    <%= hidden_field_tag :task, @task %>
+    <%= hidden_field_tag :deadline, @deadline %>
+    <%= hidden_field_tag :action_date, @action_date %>
+    <%= hidden_field_tag :related_entities, @related_entities.to_json if @related_entities.present? %>
   <% end %>
-  <input type="hidden" name="result" value="<%= @result %>">
+  
+  <%= hidden_field_tag :result, @result %>
   <button>Confirm</button>
 </form>
 
-<% if @result == 'ingredient' || @result == 'recipe' %>
+<!-- Related Entities Section -->
+<% if ['ingredient', 'recipe'].include?(@result) %>
   <h3>Related Entities:</h3>
-  <% if @result == 'ingredient' && @ingredients.any? { |ing| ing['page_id'].present? } || @result == 'recipe' && @related_entities.any? { |e| e['name'] == e['name'] && e['page_id'].present? } %>
+  <% if (@result == 'ingredient' && @ingredients.any? { |ing| ing['page_id'].present? }) || 
+        (@result == 'recipe' && @related_entities.any? { |e| e['page_id'].present? }) %>
     <ul>
       <% if @result == 'ingredient' %>
         <% @ingredients.each do |ingredient| %>
@@ -118,7 +119,7 @@
     <% end %>
   </ul>
 <% else %>
-  <% if @result == 'note' || @result == 'task' %>
+  <% if ['note', 'task'].include?(@result) %>
     <h3>Related Entities:</h3>
     <p>No entities extracted.</p>
   <% end %>
