@@ -132,7 +132,7 @@ class MainController < ApplicationController
 
     process_entities(notion_service, nil, 'note')
 
-    if @skip_confirmation
+    if @skip_confirmation # hardcore mode turned on
       create_note_in_notion(notion_service)
       flash[:notice] = notion_service.action_log
       redirect_to "/"

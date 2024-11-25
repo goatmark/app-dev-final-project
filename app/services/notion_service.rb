@@ -50,6 +50,17 @@ class NotionService
         company: { name: 'Company', type: 'relation', database: :companies }
       }
     },
+    reading_list: {
+      title: { name: 'Name', type: 'title'},
+      status: { name: 'Status', type: 'status' },
+      relations: {
+        people: {name: '👤 Recommender', type: 'relation', database: :people},
+        people: {name: '👤 Authors', type: 'relation', database: :people}
+      }
+    },
+    ideas: {
+      title: {name: 'Name', type: 'title' }
+    },
     people: {
       title: { name: 'Name', type: 'title' }
     },
