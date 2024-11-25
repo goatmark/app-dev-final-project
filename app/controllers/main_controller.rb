@@ -4,7 +4,7 @@ class MainController < ApplicationController
   protect_from_forgery except: :upload_audio
 
   def main
-    @action_log = flash[:notice] || ""
+    @action_log = flash[:notice].present? ? JSON.parse(flash[:notice]) : []
     render(template: "main_templates/home")
   end
 
@@ -47,7 +47,7 @@ class MainController < ApplicationController
       @date = params[:todays_date]
       @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
       create_note_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log.join("\n")
+      flash[:notice] = notion_service.action_log
       redirect_to "/"
     when "task"
       @task = params[:task]
@@ -55,17 +55,17 @@ class MainController < ApplicationController
       @action_date = params[:action_date]
       @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
       create_task_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log.join("\n")
+      flash[:notice] = notion_service.action_log
       redirect_to "/"
     when "ingredient"
       @ingredients = params[:ingredients].present? ? JSON.parse(params[:ingredients]) : []
       notion_service.update_ingredients(@ingredients)
-      flash[:notice] = notion_service.action_log.join("\n")
+      flash[:notice] = notion_service.action_log
       redirect_to "/"
     when "recipe"
       @recipes = params[:recipes].present? ? JSON.parse(params[:recipes]) : []
       notion_service.update_recipes(@recipes)
-      flash[:notice] = notion_service.action_log.join("\n")
+      flash[:notice] = notion_service.action_log
       redirect_to "/"
     else
       flash[:alert] = "Unknown result type."
@@ -77,7 +77,7 @@ class MainController < ApplicationController
     audio_file = params[:audio_file]
     skip_confirmation = params[:skip_confirmation] == '1'
     Rails.logger.debug "Received upload_audio request. Audio file present: #{audio_file.present?}, Skip Confirmation: #{skip_confirmation}"
-  
+
     if audio_file
       temp_audio_path = Rails.root.join('tmp', 'uploads', audio_file.original_filename)
       Rails.logger.debug "Saving audio to: #{temp_audio_path}"
@@ -85,23 +85,22 @@ class MainController < ApplicationController
         FileUtils.mkdir_p(File.dirname(temp_audio_path))
         File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
         Rails.logger.debug "Audio file saved successfully."
-  
+
         openai_service = OpenaiService.new
         transcription = openai_service.transcribe_audio(audio_file_path: temp_audio_path.to_s)
         Rails.logger.debug "Transcription received: #{transcription}"
-  
+
         File.delete(temp_audio_path) if File.exist?(temp_audio_path)
         Rails.logger.debug "Temporary audio file deleted."
-  
+
         if skip_confirmation
           Rails.logger.debug "Processing transcription in hardcore mode."
           result = process_transcription(transcription)
           if result[:success]
-            flash[:notice] = result[:message]
             Rails.logger.debug "Transcription processed successfully."
-            render json: { success: true }
+            # Return the action_log array in the JSON response
+            render json: { success: true, action_log: result[:message] }
           else
-            flash[:alert] = result[:error]
             Rails.logger.error "Error processing transcription: #{result[:error]}"
             render json: { success: false, error: result[:error] }
           end
@@ -119,7 +118,7 @@ class MainController < ApplicationController
       render json: { error: 'No audio file received.' }, status: :unprocessable_entity
     end
   end
-  
+
   private
 
   def process_note
@@ -135,7 +134,7 @@ class MainController < ApplicationController
 
     if @skip_confirmation
       create_note_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log.join("\n")
+      flash[:notice] = notion_service.action_log
       redirect_to "/"
     else
       render template: "main_templates/processing"
@@ -156,7 +155,7 @@ class MainController < ApplicationController
 
     if @skip_confirmation
       create_task_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log.join("\n")
+      flash[:notice] = notion_service.action_log
       redirect_to "/"
     else
       render template: "main_templates/processing"
@@ -174,7 +173,7 @@ class MainController < ApplicationController
     notion_service.update_ingredients(@ingredients)
 
     if @skip_confirmation
-      flash[:notice] = notion_service.action_log.join("\n")
+      flash[:notice] = notion_service.action_log
       redirect_to "/"
     else
       render template: "main_templates/processing"
@@ -192,7 +191,7 @@ class MainController < ApplicationController
     notion_service.update_recipes(@recipes)
 
     if @skip_confirmation
-      flash[:notice] = notion_service.action_log.join("\n")
+      flash[:notice] = notion_service.action_log
       redirect_to "/"
     else
       render template: "main_templates/processing"
@@ -214,15 +213,15 @@ class MainController < ApplicationController
     @related_entities.each do |entity|
       relation_field = get_relation_field_for_entity_type(entity['type'], item_type)
       next unless relation_field
-  
+
       page_id_entity, match_type = notion_service.find_or_create_entity(name: entity['name'], relation_field: relation_field)
       relations_hash[relation_field] ||= []
       relations_hash[relation_field] << page_id_entity if page_id_entity
-  
+
       entity['page_id'] = page_id_entity
       entity['match_type'] = match_type
     end
-  
+
     if page_id && relations_hash.any?
       notion_service.add_relations_to_page(page_id: page_id, relations_hash: relations_hash, item_type: item_type)
     end
@@ -242,31 +241,27 @@ class MainController < ApplicationController
       @title = openai_service.extract_note_title(message: @note)
       @related_entities = openai_service.extract_related_entities(message: @note)
       create_note_in_notion(notion_service)
-      message = notion_service.action_log.join("\n")
-      { success: true, message: message }
     when "task"
       @task = openai_service.extract_task_summary(message: @note)
       @deadline = openai_service.extract_deadline(message: @note)
       @action_date = openai_service.extract_action_date(message: @note)
       @related_entities = openai_service.extract_related_entities(message: @note)
       create_task_in_notion(notion_service)
-      message = notion_service.action_log.join("\n")
-      { success: true, message: message }
     when "ingredient"
       @ingredients = openai_service.extract_ingredients(message: @note)
       @related_entities = openai_service.extract_related_entities(message: @note)
       notion_service.update_ingredients(@ingredients)
-      flash[:notice] = notion_service.action_log.join("\n")
-      { success: true, message: notion_service.action_log.join("\n") }
     when "recipe"
       @recipes = openai_service.extract_recipes(message: @note)
       @related_entities = openai_service.extract_related_entities(message: @note)
       notion_service.update_recipes(@recipes)
-      flash[:notice] = notion_service.action_log.join("\n")
-      { success: true, message: notion_service.action_log.join("\n") }
     else
-      { success: false, error: 'Could not classify the transcription.' }
+      return { success: false, error: 'Could not classify the transcription.' }
     end
+
+    # Consolidate Action Log messages (array of hashes)
+    action_log = notion_service.action_log
+    { success: true, message: action_log }
   rescue => e
     Rails.logger.error "Processing transcription failed: #{e.message}"
     { success: false, error: 'An error occurred during processing.' }

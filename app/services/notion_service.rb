@@ -61,9 +61,42 @@ class NotionService
     }
   }.freeze
 
+  # Base URL for Notion pages
+  NOTION_BASE_URL = ENV.fetch("NOTION_BASE_URL", "https://www.notion.so/")
+
   def initialize
     @client = Notion::Client.new
     @action_log = []
+  end
+
+  # Method to construct Notion page URL
+  def construct_notion_url(page_id)
+    # Remove dashes from page_id
+    formatted_id = page_id.gsub(/-/, '')
+    "#{NOTION_BASE_URL}#{formatted_id}"
+  end
+
+  def get_page_title(page_id)
+    Rails.logger.debug "Retrieving title for Page ID: #{page_id}"
+  
+    begin
+      # Fetch page details
+      page = @client.page(page_id: page_id)
+  
+      # Retrieve the title property based on your schema
+      title_property_name = SCHEMA[:notes][:title][:name] # Adjust this based on the database type
+      title_property = page.dig("properties", title_property_name, "title")
+  
+      # Extract the plain text from the title array
+      if title_property.is_a?(Array) && title_property.any?
+        title_property.map { |text_block| text_block["plain_text"] }.join(" ")
+      else
+        "Untitled Page"
+      end
+    rescue Notion::Api::Errors::NotionError => e
+      Rails.logger.error "Error retrieving title for Page ID #{page_id}: #{e.message}"
+      "Error fetching title"
+    end
   end
 
   def find_page_by_title(database_key, title)
@@ -251,7 +284,102 @@ class NotionService
     response
   end
 
-  # Method to update multiple ingredients with matching info
+  # Method to add a note
+  def add_note(title:, body:, date:, relations: {})
+    db_id = DATABASES[:notes]
+    properties = {
+      SCHEMA[:notes][:title][:name] => {
+        'title' => [
+          {
+            'text' => {
+              'content' => title
+            }
+          }
+        ]
+      },
+      SCHEMA[:notes][:date][:name] => {
+        'date' => {
+          'start' => date
+        }
+      }
+    }
+
+    # Define the content of the page as children blocks
+    children = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'text',
+              text: {
+                'content' => body
+              }
+            }
+          ]
+        }
+      }
+    ]
+
+    response = @client.create_page(
+      parent: { database_id: db_id },
+      properties: properties,
+      children: children
+    )
+
+    page_id = response['id']
+    page_url = construct_notion_url(page_id)
+    page_title = get_page_title(page_id)
+
+    @action_log << { message: "Created Note: '#{page_title}'", url: page_url }
+    response
+  end
+
+  # Method to add a task
+  def add_task(task_name:, deadline:, action_date:, relations: {})
+    db_id = DATABASES[:tasks]
+    properties = {
+      SCHEMA[:tasks][:title][:name] => {
+        'title' => [
+          {
+            'text' => {
+              'content' => task_name
+            }
+          }
+        ]
+      },
+      SCHEMA[:tasks][:deadline][:name] => {
+        'date' => {
+          'start' => deadline
+        }
+      },
+      SCHEMA[:tasks][:action_date][:name] => {
+        'date' => {
+          'start' => action_date
+        }
+      },
+      SCHEMA[:tasks][:status][:name] => {
+        'status' => {
+          'name' => 'Next'
+        }
+      }
+    }
+
+    response = @client.create_page(
+      parent: { database_id: db_id },
+      properties: properties
+    )
+
+    page_id = response['id']
+    page_url = construct_notion_url(page_id)
+    page_title = get_page_title(page_id)
+
+    @action_log << { message: "Created Task: '#{page_title}'", url: page_url }
+    response
+  end
+
+  # Method to update multiple ingredients
   def update_ingredients(ingredients)
     ingredients.each do |ingredient|
       name = ingredient['name']
@@ -270,15 +398,17 @@ class NotionService
         update_page_properties(page_id, properties)
         ingredient['page_id'] = page_id
         ingredient['match_type'] = match_type
-        @action_log << "Updated '#{name}' amount to #{new_amount}."
+        page_url = construct_notion_url(page_id)
+        page_title = get_page_title(page_id)
+
+        @action_log << { message: "Updated Ingredient: '#{page_title}' to Quantity: #{new_amount}", url: page_url }
       else
-        @action_log << "Failed to process ingredient '#{name}'."
+        @action_log << { message: "Failed to process Ingredient: '#{name}'", url: nil }
       end
     end
   end
 
-
-  # Method to update multiple recipes as planned with matching info
+  # Method to update multiple recipes
   def update_recipes(recipes)
     recipes.each do |recipe|
       page_id, match_type = find_or_create_entity(name: recipe, relation_field: :recipes)
@@ -289,90 +419,30 @@ class NotionService
         }
 
         update_page_properties(page_id, properties)
-        @action_log << "Marked recipe '#{recipe}' as planned. (Page ID: #{page_id}, Match Type: #{match_type})"
+        page_url = construct_notion_url(page_id)
+        page_title = get_page_title(page_id)
+
+        @action_log << { message: "Marked Recipe as Planned: '#{page_title}'", url: page_url }
       else
-        @action_log << "Failed to process recipe '#{recipe}'."
+        @action_log << { message: "Failed to process Recipe: '#{recipe}'", url: nil }
       end
     end
   end
 
-  # Existing methods for adding notes and tasks
-  def add_note(title:, body:, date:, relations: {})
-    db_id = ENV.fetch("NOTES_DB_KEY")
-    properties = {
-      'Meeting' => {
-        'title' => [
-          {
-            'text' => {
-              'content' => title
-            }
-          }
-        ]
-      },
-      'Date' => {
-        'date' => {
-          'start' => date
-        }
-      }
-    }
-
-    # Define the content of the page as children blocks
-    children = [
-      {
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text',
-              text: {
-                content: body
-              }
-            }
-          ]
-        }
-      }
-    ]
-
-    @client.create_page(
-      parent: { database_id: db_id },
-      properties: properties,
-      children: children
-    )
+  def construct_notion_url(page_id)
+    formatted_id = page_id.gsub(/-/, '')
+    "#{NOTION_BASE_URL}#{formatted_id}"
   end
 
-  def add_task(task_name:, deadline:, action_date:, relations: {})
-    db_id = ENV.fetch("TASKS_DB_KEY")
-    properties = {
-      'Name' => {
-        'title' => [
-          {
-            'text' => {
-              'content' => task_name
-            }
-          }
-        ]
-      },
-      'Deadline' => {
-        'date' => {
-          'start' => deadline
-        }
-      },
-      'Action Date' => {
-        'date' => {
-          'start' => action_date
-        }
-      },
-      'Status' => {
-        'status' => {
-          'name' => 'Next'
-        }
-      }
-    }
-
-    @client.create_page(
-      parent: { database_id: db_id },
-      properties: properties
-    )
+  def log_action_with_title(page_id, relations)
+    title = get_page_title(page_id)
+    page_link = "[#{title}](https://www.notion.so/#{page_id})"
+  
+    relations_descriptions = relations.map do |relation_field, related_page_ids|
+      related_titles = related_page_ids.map { |id| get_page_title(id) }
+      "#{relation_field.capitalize}: #{related_titles.join(', ')}"
+    end.join("; ")
+  
+    "Page created: #{page_link} with relations: #{relations_descriptions}."
   end
 end
