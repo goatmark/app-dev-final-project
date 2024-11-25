@@ -4,7 +4,7 @@ class MainController < ApplicationController
   protect_from_forgery except: :upload_audio
 
   def main
-    @action_log = flash[:notice].present? ? JSON.parse(flash[:notice]) : []
+    @action_log = flash[:notice] || ""
     render(template: "main_templates/home")
   end
 

@@ -48,7 +48,7 @@ class OpenaiService
         messages: [
           {
             role: "system",
-            content: "Return only one of 'note', 'task', 'ingredient', or 'recipe' without quotes to best classify the message. Never respond otherwise."
+            content: "Return only one of 'note', 'task', 'ingredient', 'recipe', or 'recommendation' (as in book, song, or other media recommendation) without quotes to best classify the message. Never respond otherwise."
           },
           { role: "user", content: message }
         ],
