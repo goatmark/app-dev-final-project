@@ -5,18 +5,19 @@ class MainController < ApplicationController
 
   def main
     @action_log = flash[:notice] || ""
+    @skip_confirmation = flash[:skip_confirmation] == '1'
     render(template: "main_templates/home")
   end
 
   def submit
     @note = params.fetch("input", "")
-    @skip_confirmation = params[:skip_confirmation] == '1'
-    redirect_to("/processing", flash: { note: @note, skip_confirmation: @skip_confirmation })
+    skip_confirmation = (params.fetch("skip_confirmation") || flash[:skip_confirmation])
+    redirect_to("/processing", flash: { note: @note, skip_confirmation: skip_confirmation })
   end
 
   def processing
     @note = flash[:note]
-    @skip_confirmation = flash[:skip_confirmation]
+    skip_confirmation = flash[:skip_confirmation]
     @todays_date = Date.today.strftime("%Y-%m-%d")
 
     openai_service = OpenaiService.new
@@ -31,6 +32,10 @@ class MainController < ApplicationController
       process_ingredients
     when "recipe"
       process_recipes
+    when "recommendation"
+      # tbd
+    when "idea"
+      # tbd
     else
       redirect_to "/", alert: "Could not classify the transcription."
     end
@@ -75,7 +80,7 @@ class MainController < ApplicationController
 
   def upload_audio
     audio_file = params[:audio_file]
-    skip_confirmation = params[:skip_confirmation] == '1'
+    skip_confirmation = params[:skip_confirmation]
     Rails.logger.debug "Received upload_audio request. Audio file present: #{audio_file.present?}, Skip Confirmation: #{skip_confirmation}"
 
     if audio_file
@@ -125,17 +130,19 @@ class MainController < ApplicationController
     openai_service = OpenaiService.new
     notion_service = NotionService.new
 
+    Rails.logger.debug "Note. Body: #{@body}. Title: #{@title}."
+
     @body = openai_service.extract_note_body(message: @note)
     @title = openai_service.extract_note_title(message: @note)
     @related_entities = openai_service.extract_related_entities(message: @note) || []
-    @api_response = openai_service.get_last_api_response
-
+    Rails.logger.debug "Note. Body: #{@body}. Title: #{@title}."
+    Rails.logger.debug "Hardcore Mode? #{@skip_confirmation}"
+    Rails.logger.debug "Starting entity processing."
     process_entities(notion_service, nil, 'note')
 
     if @skip_confirmation # hardcore mode turned on
       create_note_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log
-      redirect_to "/"
+      redirect_to("/", flash: { notice: notion_service.action_log, skip_confirmation: @skip_confirmation })
     else
       render template: "main_templates/processing"
     end
@@ -149,7 +156,6 @@ class MainController < ApplicationController
     @deadline = openai_service.extract_deadline(message: @note)
     @action_date = openai_service.extract_action_date(message: @note)
     @related_entities = openai_service.extract_related_entities(message: @note) || []
-    @api_response = openai_service.get_last_api_response
 
     process_entities(notion_service, nil, 'task')
 
@@ -167,7 +173,6 @@ class MainController < ApplicationController
     notion_service = NotionService.new
 
     @ingredients = openai_service.extract_ingredients(message: @note) || []
-    @api_response = openai_service.get_last_api_response
 
     # Process ingredients to update quantities and get matching info
     notion_service.update_ingredients(@ingredients)
@@ -185,7 +190,6 @@ class MainController < ApplicationController
     notion_service = NotionService.new
 
     @recipes = openai_service.extract_recipes(message: @note) || []
-    @api_response = openai_service.get_last_api_response
 
     # Process recipes to mark as planned and get matching info
     notion_service.update_recipes(@recipes)
@@ -261,10 +265,10 @@ class MainController < ApplicationController
 
     # Consolidate Action Log messages (array of hashes)
     action_log = notion_service.action_log
-    { success: true, message: action_log }
-  rescue => e
-    Rails.logger.error "Processing transcription failed: #{e.message}"
-    { success: false, error: 'An error occurred during processing.' }
+    rescue => e
+      Rails.logger.error "Processing transcription failed: #{e.message}"
+      { success: false, error: 'An error occurred during processing.' }
+
   end
 
   def get_relation_field_for_entity_type(entity_type, item_type)
@@ -287,6 +291,10 @@ class MainController < ApplicationController
     elsif item_type == 'recipe'
       {
         'company' => :companies
+      }[entity_type]
+    elsif item_type == 'recommendation'
+      {
+        'person' => :people
       }[entity_type]
     else
       nil

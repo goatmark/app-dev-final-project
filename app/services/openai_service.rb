@@ -185,10 +185,6 @@ class OpenaiService
     end
   end
 
-  def get_last_api_response
-    @last_api_response
-  end
-
   def find_best_match(search_term:, options:)
     options_list = options.join("\n")
     prompt = <<~PROMPT
