@@ -29,18 +29,22 @@
 <% when 'recipe' %>
   <h2>Recipes to Plan:</h2>
   <ul>
-    <% @recipes.each do |recipe| %>
-      <li>
-        <%= recipe %>
+  <% @recipes.each do |recipe| %>
+    <li>
+      <%= recipe %>
+      <% if @related_entities %>
         <% related = @related_entities.find { |e| e['name'] == recipe } %>
         <% if related && related['page_id'] && related['match_type'] %>
           (Page ID: <%= related['page_id'] %>, Match Type: <%= related['match_type'] %>)
         <% else %>
           (No matching page found)
         <% end %>
-      </li>
-    <% end %>
-  </ul>
+      <% else %>
+        (No related entities available)
+      <% end %>
+    </li>
+  <% end %>
+</ul>
 <% else %>
   <div>Unknown result type.</div>
 <% end %>
@@ -73,55 +77,19 @@
 <!-- Related Entities Section -->
 <% if ['ingredient', 'recipe'].include?(@result) %>
   <h3>Related Entities:</h3>
-  <% if (@result == 'ingredient' && @ingredients.any? { |ing| ing['page_id'].present? }) || 
-        (@result == 'recipe' && @related_entities.any? { |e| e['page_id'].present? }) %>
+  <% if (@result == 'ingredient' && @ingredients&.any? { |ing| ing['page_id'].present? }) || 
+        (@result == 'recipe' && @related_entities&.any? { |e| e['page_id'].present? }) %>
     <ul>
       <% if @result == 'ingredient' %>
         <% @ingredients.each do |ingredient| %>
           <li>
             <b><%= ingredient['name'] %>:</b>
-            <% if ingredient['page_id'] && ingredient['match_type'] %>
-              (Page ID: <%= ingredient['page_id'] %>, Match Type: <%= ingredient['match_type'] %>)
-            <% else %>
-              (No matching page found)
-            <% end %>
-          </li>
-        <% end %>
-      <% elsif @result == 'recipe' %>
-        <% @recipes.each do |recipe| %>
-          <% related = @related_entities.find { |e| e['name'] == recipe } %>
-          <li>
-            <b><%= recipe %>:</b>
-            <% if related && related['page_id'] && related['match_type'] %>
-              (Page ID: <%= related['page_id'] %>, Match Type: <%= related['match_type'] %>)
-            <% else %>
-              (No matching page found)
-            <% end %>
           </li>
         <% end %>
       <% end %>
     </ul>
   <% else %>
-    <p>No entities extracted.</p>
-  <% end %>
-<% elsif @related_entities.present? %>
-  <h3>Related Entities:</h3>
-  <ul>
-    <% @related_entities.each do |entity| %>
-      <li>
-        <b><%= entity['type'].capitalize %>:</b> <%= entity['name'] %>
-        <% if entity['page_id'] && entity['match_type'] %>
-          (Page ID: <%= entity['page_id'] %>, Match Type: <%= entity['match_type'] %>)
-        <% else %>
-          (No matching page found)
-        <% end %>
-      </li>
-    <% end %>
-  </ul>
-<% else %>
-  <% if ['note', 'task'].include?(@result) %>
-    <h3>Related Entities:</h3>
-    <p>No entities extracted.</p>
+    <p>No related entities available.</p>
   <% end %>
 <% end %>
 

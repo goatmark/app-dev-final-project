@@ -13,8 +13,10 @@
 <label for="skip_confirmation">Skip confirmation step ("hardcore mode")</label>
 <br><br>
 
-<button id="record-button">Record</button>
-<button id="stop-button" disabled>Stop</button>
+<button id="record-button">Hold to Record</button>
+<div id="recording-indicator" style="display: none; color: red; font-weight: bold; margin-top: 10px;">
+  Recording...
+</div>
 
 <form action="/submit" method="post">
   <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
@@ -33,6 +35,7 @@
 <li>Lorna just reminded me that I need to pick her up from the airport on Friday.</li>
 <li>Need to buy cumin, black pepper, 1 yellow onion, 2 tomatoes, 4 eggplants, and a bottle of whiskey.</li>
 <li>I was sitting next to Paul Kozhipatt in my Managing the Workplace class. He advised me to finish it before applying to Apple.</li>
+<li>Dinner plan tonight: Lebanese Pita Bread, Manakish, Lamb Tagine, Roasted Garlic Hummus, and Roasted Parsnips.</li>
 </ol>
 
 <script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script>
@@ -41,14 +44,15 @@
   let stream;
 
   const recordButton = document.getElementById('record-button');
-  const stopButton = document.getElementById('stop-button');
   const inputBox = document.getElementById('input_box');
   const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
+  const recordingIndicator = document.getElementById('recording-indicator');
 
-  recordButton.addEventListener('click', async () => {
-    console.log('Record button clicked');
+  // Function to start recording
+  const startRecording = async () => {
+    console.log('Recording started');
     recordButton.disabled = true;
-    stopButton.disabled = false;
+    recordingIndicator.style.display = 'block';
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
@@ -57,23 +61,26 @@
         console.log('Microphone access granted');
         recorder = RecordRTC(stream, { type: 'audio', mimeType: 'audio/wav' });
         recorder.startRecording();
-        console.log('Recording started');
       } catch (err) {
         console.error('Error accessing microphone:', err);
         alert('An error occurred while accessing the microphone.');
         recordButton.disabled = false;
-        stopButton.disabled = true;
+        recordingIndicator.style.display = 'none';
       }
     } else {
       alert('Your browser does not support audio recording.');
       console.warn('Browser does not support audio recording');
     }
-  });
+  };
 
-  stopButton.addEventListener('click', () => {
-    console.log('Stop button clicked');
+  // Function to stop recording
+  const stopRecording = () => {
+    if (!recorder) return;
+
+    console.log('Recording stopped');
     recorder.stopRecording(() => {
-      console.log('Recording stopped');
+      recordingIndicator.style.display = 'none';
+      recordButton.disabled = false;
       let blob = recorder.getBlob();
       console.log('Blob created:', blob);
 
@@ -106,16 +113,12 @@
               window.location.reload();
             } else {
               alert(data.error || 'An error occurred during processing.');
-              recordButton.disabled = false;
-              stopButton.disabled = true;
               console.error('Processing failed:', data.error);
             }
           })
           .catch(error => {
             console.error('Fetch error:', error);
             alert('An error occurred during processing.');
-            recordButton.disabled = false;
-            stopButton.disabled = true;
           });
       } else {
         console.log('Submitting audio in normal mode');
@@ -131,14 +134,10 @@
               alert('No transcription received.');
               console.warn('No transcription in response');
             }
-            recordButton.disabled = false;
-            stopButton.disabled = true;
           })
           .catch(error => {
             console.error('Fetch error:', error);
             alert('An error occurred during transcription.');
-            recordButton.disabled = false;
-            stopButton.disabled = true;
           });
       }
 
@@ -148,5 +147,28 @@
         console.log('Audio tracks stopped');
       }
     });
+  };
+
+  // Event listeners for pointer events
+  recordButton.addEventListener('pointerdown', (event) => {
+    // Prevent default behavior to avoid unintended interactions
+    event.preventDefault();
+    startRecording();
+  });
+
+  recordButton.addEventListener('pointerup', (event) => {
+    event.preventDefault();
+    stopRecording();
+  });
+
+  // Optional: Handle pointer cancel (e.g., when touch is interrupted)
+  recordButton.addEventListener('pointercancel', (event) => {
+    event.preventDefault();
+    stopRecording();
+  });
+
+  // Prevent context menu on long press (especially on mobile)
+  recordButton.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
   });
 </script>
