@@ -115,4 +115,9 @@ gem "ruby-openai"
 gem "notion-ruby-client"
 gem "sidekiq"
 gem 'multipart-post'
+
+# Add Bootstrap for CSS
 gem 'bootstrap', '~> 5.3.0'
+
+# Add SassC for Sass support
+gem 'sassc-rails', '>= 2.1.0'
