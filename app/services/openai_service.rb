@@ -42,16 +42,30 @@ class OpenaiService
   end
 
   def classify_message(message:)
+    prompt = <<~PROMPT
+      Classify the message as belonging to one of the following databases:
+      - idea
+      - ingredient
+      - note
+      - recipe
+      - recommendation
+      - task
+      Each of these classifiers will lead to a set of appropriate events. Key examples:
+      - Suggesting items should be added to the shopping list should update the 'ingredients' database such that 'Shopping List' field is true
+      - Suggesting I intend to make something or cook something should be treated 
+      - Suggesting something is a 'task' will proceed to extract its start date and deadline (where applicable)
+      - Saying 'I should read more about nihilism' will create an entry on the 'recommendations' DB with "nihilism" as the title
+      - Any ambiguity should default to 'note'
+      Return only the classification with NO other text and without quotes.
+    PROMPT
+
     response = @client.chat(
       parameters: {
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: "Return only one of 'note', 'task', 'ingredient', 'recipe', 'recommendation' (as in book, song, person, or other media recommendation), or 'idea' without quotes to best classify the message. 
-                If ambiguous, always default to 'note'. 
-                Use 'idea' only if something is specified as an idea, otherwise defer to 'note' (always without quotes).
-                Never respond otherwise."
+            content: prompt
           },
           { role: "user", content: message }
         ],
