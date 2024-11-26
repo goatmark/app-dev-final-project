@@ -9,3 +9,6 @@ window.jQuery = jquery;
 window.$ = jquery;
 import Rails from "@rails/ujs"
 Rails.start();
+
+// Import Bootstrap JavaScript
+import * as bootstrap from "bootstrap"

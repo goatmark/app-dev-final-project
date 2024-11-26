@@ -115,3 +115,4 @@ gem "ruby-openai"
 gem "notion-ruby-client"
 gem "sidekiq"
 gem 'multipart-post'
+gem 'bootstrap', '~> 5.3.0'

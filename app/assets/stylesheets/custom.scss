@@ -1,0 +1,38 @@
+// app/assets/stylesheets/custom.scss
+
+/* Disable text selection and touch callout on the record button */
+#record-button {
+  -webkit-user-select: none; /* Safari */
+  -ms-user-select: none;     /* IE 10+ and Edge */
+  user-select: none;         /* Standard */
+  -webkit-touch-callout: none; /* Disable callout on iOS */
+  cursor: pointer;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background-color: #ff4d4d;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  color: white;
+  touch-action: none; /* Prevent default touch behaviors */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Additional styling as needed */
+}
+
+/* Style for the recording indicator */
+#recording-indicator {
+  display: none;
+  color: red;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+/* Style for the Action Log Container */
+#action-log-container {
+  margin-top: 20px;
+}
+
+/* Optional: Add responsiveness or other styles as needed */
