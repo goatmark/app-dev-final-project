@@ -121,3 +121,6 @@ gem 'bootstrap', '~> 5.3.0'
 
 # Add SassC for Sass support
 gem 'sassc-rails', '>= 2.1.0'
+
+# Add streamio for audio parsing
+gem 'streamio-ffmpeg'

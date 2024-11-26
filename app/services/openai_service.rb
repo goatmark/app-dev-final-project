@@ -15,7 +15,7 @@ class OpenaiService
     # Create the multipart POST request
     File.open(audio_file_path) do |file|
       request = Net::HTTP::Post::Multipart.new uri.path,
-        "file" => UploadIO.new(file, "audio/webm", File.basename(file)),
+        "file" => UploadIO.new(file, "audio/wav", File.basename(file)),
         "model" => "whisper-1",
         "language" => "en"
   
@@ -61,7 +61,7 @@ class OpenaiService
 
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           {
             role: "system",
@@ -79,7 +79,7 @@ class OpenaiService
   def extract_task_summary(message:)
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "system", content: "Extract only a summary of the task as if it were to be put on a To-Do list or Kanban board. Do not use any leading bullet/hyphen characters. If a deadline is specified, do not include it in the task summary; it will be extracted separately." },
           { role: "user", content: message }
@@ -94,7 +94,7 @@ class OpenaiService
   def extract_recommendation_summary(message:)
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "system", content: "Extract only the identified piece of media (book title, article title, etc). Only include the title. Do not include any other text. Do not include author name or any other information (unless the recommendation lacks a specific name or includes something like 'Books by David Wright' or 'Philosophy of Nietzsche' or 'Dr. Oz's Podcast' - in which case, returna helpful description that accurately captures the recommendation)." },
           { role: "user", content: message }
@@ -109,7 +109,7 @@ class OpenaiService
   def extract_recommendation_type(message:)
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "system", content: "Return only: 'Article', 'Book', 'Music', 'Podcast', or 'Topic / Person' without quotes based on what the piece of media identified in the message is most likely to belong to." },
           { role: "user", content: message }
@@ -128,7 +128,7 @@ class OpenaiService
     tomorrow_date = (today + 1).strftime('%Y-%m-%d')
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "system", content: "Return only the deadline knowing today is #{dow}, #{todays_date}. (e.g., if something says it's due Tuesday, assume it's due the first Tuesday after #{todays_date}). If no deadline specified, return #{tomorrow_date}. If something is to be done 'today', return #{todays_date}. If something is due 'next week', assume a 7-day deadline from today. If something is due 'next month', assume a deadline a full calendar month from today. Strictly always respond in 'YYYY-MM-DD' format without quotes. Assume something to be done 'end of the week' is due Friday." },
           { role: "user", content: message }
@@ -146,7 +146,7 @@ class OpenaiService
     tomorrow_date = (today + 1).strftime('%Y-%m-%d')
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "system", content: "Today's date is #{todays_date}. If the prompt contains information about a 'reminder', e.g., 'remind me in 2 days,' return only the corresponding date in 'YYYY-MM-DD' format. Do not confuse this with the deadline. If a prompt says 'Send out an email in 2 days,' you should return #{todays_date}. If a prompt says 'Remind me tomorrow to send an email in 2 days,' you should return only #{tomorrow_date}. If the prompt does not contain information about a reminder, return only #{todays_date}. Only ever return a date. Assume something to be done 'end of the week' is due Friday." },
           { role: "user", content: message }
@@ -161,7 +161,7 @@ class OpenaiService
   def extract_note_title(message:)
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "system", content: "The message contains the 'body' of a Note to be stored in a database. Return only a proposed 'title' for the note. Do not return anything other than a title without quotes. Keep it concise, salient, and descriptive, not poetic. Colons are strictly not allowed." },
           { role: "user", content: message }
@@ -176,7 +176,7 @@ class OpenaiService
   def extract_note_body(message:)
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "system", content: "Context: You are responsible for parsing elements of a dictation. Your job is to extract just the 'note' part of the message given to you, excluding any commands given to the dictation app. In other words, if receiving something that says 'Make a note that I need to...', return 'I need to...' onwards. Return the full note. Do NOT summarize, paraphrase, or copy edit. You may only make minor tweaks to address filler words (ums/likes), misspoken words, or fractured sentences. Do NOT summarize. Do NOT attempt to improve the quality of writing beyond specification." },
           { role: "user", content: message }
@@ -206,7 +206,7 @@ class OpenaiService
 
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "user", content: prompt }
         ],
@@ -250,7 +250,7 @@ class OpenaiService
 
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "user", content: prompt }
         ],
@@ -292,7 +292,7 @@ class OpenaiService
 
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "user", content: prompt }
         ],
@@ -333,7 +333,7 @@ class OpenaiService
 
     response = @client.chat(
       parameters: {
-        model: "gpt-4o-mini",
+        model: "gpt-4",
         messages: [
           { role: "user", content: prompt }
         ],
