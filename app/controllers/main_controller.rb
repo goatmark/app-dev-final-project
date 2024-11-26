@@ -97,7 +97,7 @@ class MainController < ApplicationController
     audio_file = params[:audio_file]
     skip_confirmation = params[:skip_confirmation] == '1'
     Rails.logger.debug "Received upload_audio request. Audio file present: #{audio_file.present?}, Skip Confirmation: #{skip_confirmation}"
-  
+    
     if audio_file
       temp_audio_path = Rails.root.join('tmp', 'uploads', audio_file.original_filename)
       Rails.logger.debug "Saving audio to: #{temp_audio_path}"
@@ -105,7 +105,7 @@ class MainController < ApplicationController
         FileUtils.mkdir_p(File.dirname(temp_audio_path))
         File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
         Rails.logger.debug "Audio file saved successfully. Size: #{File.size(temp_audio_path)} bytes."
-  
+
         # Check file size (e.g., minimum 1KB)
         if File.size(temp_audio_path) < 1000
           Rails.logger.error "Audio file too small: #{File.size(temp_audio_path)} bytes."
@@ -113,7 +113,7 @@ class MainController < ApplicationController
           render json: { error: 'Audio file is too short. Please record a longer message.' }, status: :unprocessable_entity
           return
         end
-  
+
         # Convert WebM to WAV using FFmpeg
         converted_audio_path = Rails.root.join('tmp', 'uploads', "converted_#{SecureRandom.uuid}.wav")
         movie = FFMPEG::Movie.new(temp_audio_path.to_s)
@@ -122,7 +122,7 @@ class MainController < ApplicationController
           channels: 1, 
           custom: %w(-ar 16000) 
         } # Removed audio_bitrate
-  
+
         movie.transcode(converted_audio_path.to_s, transcoding_options) do |progress|
           if progress.finite?
             Rails.logger.debug "Transcoding progress: #{(progress * 100).to_i}%"
@@ -130,23 +130,24 @@ class MainController < ApplicationController
             Rails.logger.warn "Transcoding progress: Infinity"
           end
         end
-  
+
         Rails.logger.debug "Audio file converted successfully to WAV. Size: #{File.size(converted_audio_path)} bytes."
-  
+
         openai_service = OpenaiService.new
         transcription = openai_service.transcribe_audio(audio_file_path: converted_audio_path.to_s)
         Rails.logger.debug "Transcription received: #{transcription}"
-  
+
         if skip_confirmation
           Rails.logger.debug "Processing transcription in hardcore mode."
           result = process_transcription(transcription)
           Rails.logger.debug "process_transcription() method complete."
-  
+
           if result[:success]
             flash[:transcription] = transcription
             flash[:notice] = result[:action_log]
             render json: { success: true, action_log: result[:action_log], transcription: transcription }, status: :ok
           else
+            Rails.logger.error "Transcription processing failed: #{result[:error]}"
             render json: { success: false, error: result[:error] }, status: :unprocessable_entity
           end
         else

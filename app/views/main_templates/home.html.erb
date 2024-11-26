@@ -1,3 +1,5 @@
+<!-- app/views/main_templates/home.html.erb -->
+
 <!DOCTYPE html>
 <html>
   <head>
@@ -22,6 +24,10 @@
         font-weight: bold;
         margin-bottom: 1rem;
       }
+      /* Additional styles for permission messages */
+      #permission-message, #permission-granted-indicator {
+        margin-bottom: 1rem;
+      }
     </style>
   </head>
 
@@ -32,8 +38,20 @@
 
       <h1 class="mb-4">Dictation App</h1>
 
+      <!-- Permission Messages -->
+      <div id="permission-message" class="alert alert-warning" style="display: none;">
+        Microphone access is required for recording. Please enable it in your browser settings.
+      </div>
+      <div id="permission-granted-indicator" class="text-success fw-bold mb-3" style="display: none;">
+        Microphone access granted. You can start recording.
+      </div>
+      <div id="permission-denied-indicator" class="alert alert-danger" style="display: none;">
+        Microphone access denied. Please allow access to use the recording feature.
+        <button id="retry-permission" class="btn btn-primary btn-sm mt-2">Retry Permission</button>
+      </div>
+
       <!-- Hold to Record Button -->
-      <button id="record-button" class="btn btn-danger mb-3" aria-label="Hold to start recording">
+      <button id="record-button" class="btn btn-danger mb-3" aria-label="Hold to start recording" aria-pressed="false">
         Hold to Record
       </button>
 
@@ -120,10 +138,17 @@
           const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
           const actionLogContainer = document.getElementById('action-log-container');
 
+          // Permission Indicators
+          const permissionMessage = document.getElementById('permission-message');
+          const permissionGrantedIndicator = document.getElementById('permission-granted-indicator');
+          const permissionDeniedIndicator = document.getElementById('permission-denied-indicator');
+          const retryPermissionButton = document.getElementById('retry-permission');
+
           // Variables
           let mediaRecorder = null;
           let audioChunks = [];
           let isRecording = false;
+          let microphonePermissionGranted = false;
 
           // Function to sanitize HTML to prevent XSS
           const sanitizeHTML = (str) => {
@@ -132,16 +157,68 @@
             return temp.innerHTML;
           };
 
+          // Function to request microphone access on load
+          const requestMicrophoneAccess = async () => {
+            if (localStorage.getItem('micPermissionRequested')) {
+              // Check permission status
+              const permission = await navigator.permissions.query({ name: 'microphone' });
+              if (permission.state === 'granted') {
+                microphonePermissionGranted = true;
+                permissionGrantedIndicator.style.display = 'block';
+                permissionMessage.style.display = 'none';
+                permissionDeniedIndicator.style.display = 'none';
+                console.log('Microphone permission already granted.');
+              } else if (permission.state === 'denied') {
+                microphonePermissionGranted = false;
+                permissionDeniedIndicator.style.display = 'block';
+                permissionMessage.style.display = 'none';
+                permissionGrantedIndicator.style.display = 'none';
+                console.log('Microphone permission already denied.');
+              }
+              return;
+            }
+
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              microphonePermissionGranted = true;
+              localStorage.setItem('micPermissionRequested', 'true');
+              permissionGrantedIndicator.style.display = 'block';
+              permissionMessage.style.display = 'none';
+              permissionDeniedIndicator.style.display = 'none';
+              console.log('Microphone permission granted on load.');
+              // Stop the stream immediately as we only needed to get permission
+              stream.getTracks().forEach(track => track.stop());
+            } catch (error) {
+              console.error('Microphone permission denied:', error);
+              microphonePermissionGranted = false;
+              permissionDeniedIndicator.style.display = 'block';
+              permissionMessage.style.display = 'none';
+            }
+          };
+
+          // Call the permission request on load
+          requestMicrophoneAccess();
+
+          // Retry Permission Access
+          if (retryPermissionButton) {
+            retryPermissionButton.addEventListener('click', () => {
+              // Remove the previous denial
+              localStorage.removeItem('micPermissionRequested');
+              permissionDeniedIndicator.style.display = 'none';
+              permissionMessage.style.display = 'block';
+              // Attempt to request permission again
+              requestMicrophoneAccess();
+            });
+          }
+
           // Function to start recording
           const startRecording = async () => {
-            try {
-              // Check for MediaRecorder support
-              if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert('Your browser does not support audio recording.');
-                return false;
-              }
+            if (!microphonePermissionGranted) {
+              alert('Microphone access is not granted. Please allow access to use the recording feature.');
+              return false;
+            }
 
-              // Request microphone access
+            try {
               const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
               mediaRecorder = new MediaRecorder(stream);
 
@@ -159,6 +236,7 @@
               mediaRecorder.start();
               isRecording = true;
               recordingIndicator.style.display = 'block';
+              recordButton.classList.add('recording');
               console.log('Recording started');
               return true;
             } catch (error) {
@@ -175,6 +253,7 @@
             mediaRecorder.stop();
             isRecording = false;
             recordingIndicator.style.display = 'none';
+            recordButton.classList.remove('recording');
             console.log('Recording stopped');
           };
 
@@ -292,6 +371,7 @@
             if (!success) {
               // If recording failed to start, reset UI elements
               recordingIndicator.style.display = 'none';
+              recordButton.classList.remove('recording');
               recordButton.disabled = false;
             }
           };
@@ -325,6 +405,10 @@
               handleStopEvent(event);
             }
           });
+
+          // Touch Events for iOS Compatibility
+          recordButton.addEventListener('touchstart', handleStartEvent);
+          recordButton.addEventListener('touchend', handleStopEvent);
         });
       </script>
     </div>
