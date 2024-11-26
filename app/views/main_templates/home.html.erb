@@ -78,7 +78,6 @@
               <% end %>
             </ul>
           <% else %>
-            <p id="no-history-message">No recent history.</p>
           <% end %>
         </div>
       </div>
@@ -181,49 +180,49 @@
 
           // Function to handle the recording stop event
           const handleRecordingStop = async () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            audioChunks = []; // Reset for next recording
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          audioChunks = []; // Reset for next recording
 
-            // Prepare form data
-            const formData = new FormData();
-            formData.append('audio_file', audioBlob, 'recording.webm');
-            formData.append('authenticity_token', '<%= form_authenticity_token %>');
-            formData.append('skip_confirmation', hardcoreModeCheckbox.checked ? '1' : '0');
+          // Prepare form data
+          const formData = new FormData();
+          formData.append('audio_file', audioBlob, 'recording.webm');
+          formData.append('authenticity_token', '<%= form_authenticity_token %>');
+          formData.append('skip_confirmation', hardcoreModeCheckbox.checked ? '1' : '0');
 
-            try {
-              const response = await fetch('/upload_audio', {
-                method: 'POST',
-                body: formData
-              });
+          try {
+            const response = await fetch('/upload_audio', {
+              method: 'POST',
+              body: formData
+            });
 
-              if (!response.ok) {
-                const errorData = await response.json();
-                throw errorData;
-              }
-
-              const data = await response.json();
-              console.log('Fetch response:', data);
-
-              if (hardcoreModeCheckbox.checked) {
-                if (data.action_log && data.action_log.length > 0) {
-                  displayActionLog(data.transcription, data.action_log);
-                } else {
-                  alert('No action log received.');
-                  if (data.transcription) {
-                    // Even if no action log, display transcription
-                    displayActionLog(data.transcription, []);
-                  }
-                }
-              } else if (data.transcription) {
-                inputBox.value = sanitizeHTML(data.transcription);
-              } else {
-                alert('Unexpected response from the server.');
-              }
-            } catch (error) {
-              console.error('Fetch error:', error);
-              alert(error.error || 'An error occurred during processing.');
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw errorData;
             }
-          };
+
+            const data = await response.json();
+            console.log('Fetch response:', data);
+
+            if (hardcoreModeCheckbox.checked) {
+              if (data.action_log && data.action_log.length > 0) {
+                displayActionLog(data.transcription, data.action_log);
+              } else {
+                alert('No action log received.');
+                if (data.transcription) {
+                  // Even if no action log, display transcription
+                  displayActionLog(data.transcription, []);
+                }
+              }
+            } else if (data.transcription) {
+              inputBox.value = sanitizeHTML(data.transcription);
+            } else {
+              alert('Unexpected response from the server.');
+            }
+          } catch (error) {
+            console.error('Fetch error:', error);
+            alert(error.error || 'An error occurred during processing.');
+          }
+        };
 
           // Function to display the Transcription and Action Log
           const displayActionLog = (transcription, actionLog) => {
