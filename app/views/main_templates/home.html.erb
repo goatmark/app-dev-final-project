@@ -37,7 +37,7 @@
   <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
   <div class="mb-3">
     <%= label_tag :input_box, "Transcription", class: "form-label" %>
-    <%= textarea_tag :input, @input || "", id: "input_box", rows: 3, placeholder: "Dictation will appear here...", class: "form-control", lang: "en" %>
+    <%= text_area_tag :input, @input || "", id: "input_box", rows: 3, placeholder: "Dictation will appear here...", class: "form-control", lang: "en" %>
   </div>
   <button type="submit" class="btn btn-primary">Submit</button>
 </form>
