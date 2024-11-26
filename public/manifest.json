@@ -1,0 +1,15 @@
+{
+  "short_name": "DictationApp",
+  "name": "Dictation App",
+  "icons": [
+    {
+      "src": "/assets/icons/speaker-180x.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "theme_color": "#000000"
+}
