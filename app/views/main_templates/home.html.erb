@@ -53,9 +53,10 @@
   <li>Dinner plan tonight: Lebanese Pita Bread, Manakish, Lamb Tagine, Roasted Garlic Hummus, and Roasted Parsnips.</li>
 </ol>
 
-<script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script>
+<!-- <script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script> -->
 <script>
-  let recorder;
+  let mediaRecorder;
+  let audioChunks = [];
   let stream;
 
   const recordButton = document.getElementById('record-button');
@@ -73,105 +74,131 @@
 
   // Function to start recording
   const startRecording = async () => {
-    console.log('Recording started');
-    recordButton.disabled = true;
-    recordingIndicator.style.display = 'block';
+    console.log('Attempting to start recording');
 
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        console.log('Requesting microphone access');
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('Microphone access granted');
-        recorder = RecordRTC(stream, { type: 'audio', mimeType: 'audio/wav' });
-        recorder.startRecording();
-      } catch (err) {
-        console.error('Error accessing microphone:', err);
-        alert('An error occurred while accessing the microphone.');
-        recordButton.disabled = false;
-        recordingIndicator.style.display = 'none';
+    try {
+      // Check microphone permission
+      let permissionStatus = 'prompt';
+      if (navigator.permissions) {
+        try {
+          const status = await navigator.permissions.query({ name: 'microphone' });
+          permissionStatus = status.state;
+        } catch (err) {
+          console.warn('Permissions API not fully supported:', err);
+        }
       }
-    } else {
-      alert('Your browser does not support audio recording.');
-      console.warn('Browser does not support audio recording');
+
+      if (permissionStatus === 'denied') {
+        alert('Microphone access denied. Please enable it in your device settings.');
+        return;
+      }
+
+      // Request media
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('Microphone access granted');
+
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+      mediaRecorder.ondataavailable = event => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        audioChunks = []; // Reset for next recording
+
+        console.log('Audio blob size:', audioBlob.size);
+
+        if (audioBlob.size < 1000) { // Arbitrary threshold (e.g., 1KB)
+          alert('Recorded audio is too short. Please try again.');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('audio_file', audioBlob, 'recording.webm');
+        formData.append('authenticity_token', '<%= form_authenticity_token %>');
+
+        const hardcoreMode = hardcoreModeCheckbox.checked ? '1' : '0';
+        formData.append('skip_confirmation', hardcoreMode);
+
+        const fetchOptions = {
+          method: 'POST',
+          body: formData
+        };
+
+        if (hardcoreMode === '1') {
+          console.log('Submitting audio in hardcore mode');
+          fetch('/upload_audio', fetchOptions)
+            .then(response => response.json())
+            .then(data => {
+              console.log('Response received:', data);
+              if (data.success) {
+                if (data.action_log && Array.isArray(data.action_log)) {
+                  displayActionLog(data.action_log);
+                }
+              } else {
+                alert(data.error || 'An error occurred during processing.');
+                console.error('Processing failed:', data.error);
+              }
+            })
+            .catch(error => {
+              console.error('Fetch error:', error);
+              alert('An error occurred during processing.');
+            });
+        } else {
+          console.log('Submitting audio in normal mode');
+          fetch('/upload_audio', fetchOptions)
+            .then(response => response.json())
+            .then(data => {
+              console.log('Response received:', data);
+              if (data.transcription) {
+                inputBox.value = data.transcription;
+                console.log('Textarea updated with transcription');
+              } else {
+                alert('No transcription received.');
+                console.warn('No transcription in response');
+              }
+            })
+            .catch(error => {
+              console.error('Fetch error:', error);
+              alert('An error occurred during transcription.');
+            });
+        }
+
+        // Stop all audio tracks to release the microphone
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          console.log('Audio tracks stopped');
+        }
+      };
+
+      mediaRecorder.onerror = event => {
+        console.error('MediaRecorder error:', event.error);
+        alert('An error occurred during recording.');
+        recordingIndicator.style.display = 'none';
+        recordButton.disabled = false;
+      };
+
+      mediaRecorder.start();
+      recordingIndicator.style.display = 'block';
+      recordButton.disabled = true;
+      console.log('Recording started');
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+      alert('An error occurred while accessing the microphone.');
     }
   };
 
   // Function to stop recording
   const stopRecording = () => {
-    if (!recorder) return;
+    if (!mediaRecorder) return;
 
-    console.log('Recording stopped');
-    recorder.stopRecording(() => {
-      recordingIndicator.style.display = 'none';
-      recordButton.disabled = false;
-      let blob = recorder.getBlob();
-      console.log('Blob created:', blob);
-
-      const formData = new FormData();
-      formData.append('audio_file', blob, 'recording.wav');
-      formData.append('authenticity_token', '<%= form_authenticity_token %>');
-
-      const hardcoreMode = hardcoreModeCheckbox.checked ? '1' : '0';
-      formData.append('skip_confirmation', hardcoreMode);
-      console.log('FormData prepared:', {
-        audio_file: blob,
-        authenticity_token: '<%= form_authenticity_token %>',
-        skip_confirmation: hardcoreMode
-      });
-
-      const fetchOptions = {
-        method: 'POST',
-        body: formData
-      };
-
-      if (hardcoreMode === '1') {
-        console.log('Submitting audio in hardcore mode');
-        // Hardcore mode: process immediately without updating the textarea
-        fetch('/upload_audio', fetchOptions)
-          .then(response => response.json())
-          .then(data => {
-            console.log('Response received:', data);
-            if (data.success) {
-              // Display the action log if available
-              if (data.action_log && Array.isArray(data.action_log)) {
-                displayActionLog(data.action_log);
-              }
-            } else {
-              alert(data.error || 'An error occurred during processing.');
-              console.error('Processing failed:', data.error);
-            }
-          })
-          .catch(error => {
-            console.error('Fetch error:', error);
-            alert('An error occurred during processing.');
-          });
-      } else {
-        console.log('Submitting audio in normal mode');
-        // Normal mode: update the textarea with the transcription
-        fetch('/upload_audio', fetchOptions)
-          .then(response => response.json())
-          .then(data => {
-            console.log('Response received:', data);
-            if (data.transcription) {
-              inputBox.value = data.transcription;
-              console.log('Textarea updated with transcription');
-            } else {
-              alert('No transcription received.');
-              console.warn('No transcription in response');
-            }
-          })
-          .catch(error => {
-            console.error('Fetch error:', error);
-            alert('An error occurred during transcription.');
-          });
-      }
-
-      // Stop all audio tracks to release the microphone
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        console.log('Audio tracks stopped');
-      }
-    });
+    console.log('Stopping recording');
+    mediaRecorder.stop();
+    recordingIndicator.style.display = 'none';
+    recordButton.disabled = false;
   };
 
   // Function to display the Action Log with descriptive messages and hyperlinks
@@ -273,5 +300,5 @@
       event.preventDefault();
       stopRecording();
     }
-  });
+});
 </script>
