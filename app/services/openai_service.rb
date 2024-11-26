@@ -79,7 +79,7 @@ class OpenaiService
       parameters: {
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Extract only the identified piece of media (book title, article title, etc). Only include the title. Do not include any other text. Do not include author name or any other information." },
+          { role: "system", content: "Extract only the identified piece of media (book title, article title, etc). Only include the title. Do not include any other text. Do not include author name or any other information (unless the recommendation lacks a specific name or includes something like 'Books by David Wright' or 'Philosophy of Nietzsche' or 'Dr. Oz's Podcast' - in which case, returna helpful description that accurately captures the recommendation)." },
           { role: "user", content: message }
         ],
         temperature: 0.7
@@ -94,7 +94,7 @@ class OpenaiService
       parameters: {
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Return only: 'Article', 'Book', or 'Podcast' without quotes based on what the piece of media identified in the message is most likely to belong to." },
+          { role: "system", content: "Return only: 'Article', 'Book', 'Music', 'Podcast', or 'Topic / Person' without quotes based on what the piece of media identified in the message is most likely to belong to." },
           { role: "user", content: message }
         ],
         temperature: 0.7

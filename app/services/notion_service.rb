@@ -50,12 +50,11 @@ class NotionService
         company: { name: 'Company', type: 'relation', database: :companies }
       }
     },
-    reading_list: {
+    recommendations: {
       title: { name: 'Name', type: 'title'},
-      status: { name: 'Status', type: 'status' },
+      #status: { name: 'Status', type: 'status' },
       relations: {
-        people: {name: '👤 Recommender', type: 'relation', database: :people},
-        people: {name: '👤 Authors', type: 'relation', database: :people}
+        people: {name: 'Recommender', type: 'relation', database: :people}
       }
     },
     ideas: {
@@ -387,6 +386,34 @@ class NotionService
     page_title = get_page_title(page_id)
 
     @action_log << { message: "Created Task: '#{page_title}'", url: page_url }
+    response
+  end
+
+  # Method to add a task
+  def add_recommendation(name:, type:, relations: {})
+    db_id = DATABASES[:tasks]
+    properties = {
+      SCHEMA[:recommendations][:title][:name] => {
+        'title' => [
+          {
+            'text' => {
+              'content' => name
+            }
+          }
+        ]
+      }
+    }
+
+    response = @client.create_page(
+      parent: { database_id: db_id },
+      properties: properties
+    )
+
+    page_id = response['id']
+    page_url = construct_notion_url(page_id)
+    page_title = get_page_title(page_id)
+
+    @action_log << { message: "Created Recommendation: '#{page_title}'", url: page_url }
     response
   end
 

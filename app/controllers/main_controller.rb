@@ -273,6 +273,11 @@ class MainController < ApplicationController
       @action_date = openai_service.extract_action_date(message: @note)
       @related_entities = openai_service.extract_related_entities(message: @note)
       create_task_in_notion(notion_service)
+    when "recommendation"
+      @recommendation = openai_service.extract_recommendation_summary(message: @note)
+      @recommendation_type = openai_service.extract_recommendation_type(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      create_recommendation_in_notion(notion_service)
     when "ingredient"
       @ingredients = openai_service.extract_ingredients(message: @note)
       @related_entities = openai_service.extract_related_entities(message: @note)
@@ -281,12 +286,6 @@ class MainController < ApplicationController
       @recipes = openai_service.extract_recipes(message: @note)
       @related_entities = openai_service.extract_related_entities(message: @note)
       notion_service.update_recipes(@recipes)
-    when "recommendation"
-      @recommendation = openai_service.extract_recommendation_summary(message: @note)
-      @recommendation_type = openai_service.extract_recommendation_type(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note) || []
-      notion_service.create_recommendation_in_notion(@recommendation)
-
     else
       return { success: false, error: 'Could not classify the transcription.' }
     end
