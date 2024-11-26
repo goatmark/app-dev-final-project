@@ -265,7 +265,7 @@ class MainController < ApplicationController
 
     notion_service = NotionService.new
 
-    Rails.logger.debug "Parsing result."
+    Rails.logger.debug "Parsing result: #{@result}"
     case @result
     when "note"
       @body = openai_service.extract_note_body(message: @note)
@@ -295,7 +295,6 @@ class MainController < ApplicationController
     else
       return { success: false, error: 'Could not classify the transcription.' }
     end
-
     
     # Consolidate Action Log messages (array of hashes)
     action_log = notion_service.action_log
