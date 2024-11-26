@@ -11,7 +11,9 @@ class NotionService
     classes: ENV.fetch("CLASSES_DB_KEY"),
     companies: ENV.fetch("COMPANIES_DB_KEY"),
     ingredients: ENV.fetch("INGREDIENTS_DB_KEY"),
-    recipes: ENV.fetch("RECIPES_DB_KEY")
+    recipes: ENV.fetch("RECIPES_DB_KEY"),
+    recommendations: ENV.fetch("RECOMMENDATIONS_DB_KEY"),
+    ideas: ENV.fetch("IDEAS_DB_KEY")
   }.freeze
 
   # Schema Definitions
@@ -54,7 +56,7 @@ class NotionService
       title: { name: 'Name', type: 'title'},
       #status: { name: 'Status', type: 'status' },
       relations: {
-        people: {name: 'Recommender', type: 'relation', database: :people}
+        people: {name: 'People', type: 'relation', database: :people}
       }
     },
     ideas: {

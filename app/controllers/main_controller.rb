@@ -33,7 +33,7 @@ class MainController < ApplicationController
     when "recipe"
       process_recipes
     when "recommendation"
-      # tbd
+      process_recommendation
     when "idea"
       # tbd
     else
@@ -59,6 +59,12 @@ class MainController < ApplicationController
       @action_date = params[:action_date]
       @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
       create_task_in_notion(notion_service)
+      flash[:notice] = notion_service.action_log
+      redirect_to "/"
+    when "recommendation"
+      @recommendation = params[:recommendation]
+      @recommendation_type = params[:recommendation_type]
+      create_recommendation_in_notion(notion_service)
       flash[:notice] = notion_service.action_log
       redirect_to "/"
     when "ingredient"
