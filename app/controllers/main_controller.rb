@@ -21,19 +21,20 @@ class MainController < ApplicationController
     @todays_date = Date.today.strftime("%Y-%m-%d")
 
     openai_service = OpenaiService.new
+    notion_service = NotionService.new
     @result = openai_service.classify_message(message: @note)
 
     case @result
     when "note"
-      process_note
+      process_note(notion_service)
     when "task"
-      process_task
+      process_task(notion_service)
     when "ingredient"
-      process_ingredients
+      process_ingredients(notion_service)
     when "recipe"
-      process_recipes
+      process_recipes(notion_service)
     when "recommendation"
-      process_recommendation
+      process_recommendation(notion_service)
     when "idea"
       # tbd
     else
@@ -87,7 +88,7 @@ class MainController < ApplicationController
     audio_file = params[:audio_file]
     skip_confirmation = params[:skip_confirmation]
     Rails.logger.debug "Received upload_audio request. Audio file present: #{audio_file.present?}, Skip Confirmation: #{skip_confirmation}"
-  
+
     if audio_file
       temp_audio_path = Rails.root.join('tmp', 'uploads', audio_file.original_filename)
       Rails.logger.debug "Saving audio to: #{temp_audio_path}"
@@ -95,7 +96,7 @@ class MainController < ApplicationController
         FileUtils.mkdir_p(File.dirname(temp_audio_path))
         File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
         Rails.logger.debug "Audio file saved successfully. Size: #{File.size(temp_audio_path)} bytes."
-  
+
         # Check file size (e.g., minimum 1KB)
         if File.size(temp_audio_path) < 1000
           Rails.logger.error "Audio file too small: #{File.size(temp_audio_path)} bytes."
@@ -103,14 +104,14 @@ class MainController < ApplicationController
           render json: { error: 'Audio file is too short. Please record a longer message.' }, status: :unprocessable_entity
           return
         end
-  
+
         openai_service = OpenaiService.new
         transcription = openai_service.transcribe_audio(audio_file_path: temp_audio_path.to_s)
         Rails.logger.debug "Transcription received: #{transcription}"
-  
+
         File.delete(temp_audio_path) if File.exist?(temp_audio_path)
         Rails.logger.debug "Temporary audio file deleted."
-  
+
         if skip_confirmation
           Rails.logger.debug "Processing transcription in hardcore mode."
           result = process_transcription(transcription)
@@ -133,9 +134,8 @@ class MainController < ApplicationController
 
   private
 
-  def process_note
+  def process_note(notion_service)
     openai_service = OpenaiService.new
-    notion_service = NotionService.new
 
     Rails.logger.debug "Note. Body: #{@body}. Title: #{@title}."
 
@@ -155,9 +155,8 @@ class MainController < ApplicationController
     end
   end
 
-  def process_task
+  def process_task(notion_service)
     openai_service = OpenaiService.new
-    notion_service = NotionService.new
 
     @task = openai_service.extract_task_summary(message: @note)
     @deadline = openai_service.extract_deadline(message: @note)
@@ -175,9 +174,8 @@ class MainController < ApplicationController
     end
   end
 
-  def process_recommendation
+  def process_recommendation(notion_service)
     openai_service = OpenaiService.new
-    notion_service = NotionService.new
 
     @recommendation = openai_service.extract_recommendation_summary(message: @note)
     @recommendation_type = openai_service.extract_recommendation_type(message: @note)
@@ -194,9 +192,8 @@ class MainController < ApplicationController
     end
   end
 
-  def process_ingredients
+  def process_ingredients(notion_service)
     openai_service = OpenaiService.new
-    notion_service = NotionService.new
 
     @ingredients = openai_service.extract_ingredients(message: @note) || []
 
@@ -211,9 +208,8 @@ class MainController < ApplicationController
     end
   end
 
-  def process_recipes
+  def process_recipes(notion_service)
     openai_service = OpenaiService.new
-    notion_service = NotionService.new
 
     @recipes = openai_service.extract_recipes(message: @note) || []
 

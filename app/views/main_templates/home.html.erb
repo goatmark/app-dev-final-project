@@ -1,322 +1,441 @@
 <!-- app/views/main_templates/home.html.erb -->
-<h1 class="mb-4">Dictation App</h1>
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Dictation App</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
 
-<!-- Action Log Container -->
-<% if @action_log.present? && @action_log.any? %>
-  <div class="bg-info text-white p-3 rounded mb-4">
-    <h3>Action Log:</h3>
-    <ul>
-      <% @action_log.each do |entry| %>
-        <% if entry['url'] %>
-          <li>
-            <strong><%= entry['message'] %></strong>: 
-            <a href="<%= entry['url'] %>" target="_blank" class="text-white"><u>View in Notion</u></a>
-          </li>
-        <% else %>
-          <li><%= entry['message'] %></li>
-        <% end %>
+    <!-- Include Bootstrap CSS -->
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body>
+    <div class="container mt-5">
+      <a href="/" class="btn btn-secondary mb-4">Back to Home</a>
+      <hr>
+
+      <h1 class="mb-4">Dictation App</h1>
+
+      <!-- Action Log Container -->
+      <% if flash[:notice].present? && flash[:notice].any? %>
+        <div id="action-log-container" class="bg-info text-white p-3 rounded mb-4">
+          <h3>Action Log:</h3>
+          <ul>
+            <% flash[:notice].each do |entry| %>
+              <% if entry['url'] %>
+                <li>
+                  <strong><%= entry['message'] %></strong>: 
+                  <a href="<%= entry['url'] %>" target="_blank" class="text-white"><u>View in Notion</u></a>
+                </li>
+              <% else %>
+                <li><%= entry['message'] %></li>
+              <% end %>
+            <% end %>
+          </ul>
+        </div>
+      <% else %>
+        <p id="no-activity-message">No recent activity.</p>
       <% end %>
-    </ul>
-  </div>
-<% else %>
-  <p>No recent activity.</p>
-<% end %>
 
-<div class="form-check mb-3">
-  <input type="checkbox" class="form-check-input" id="skip_confirmation" name="skip_confirmation" value="1" checked>
-  <label class="form-check-label" for="skip_confirmation">Skip confirmation step ("hardcore mode")</label>
-</div>
+      <!-- Hardcore Mode Checkbox -->
+      <div class="form-check mb-3">
+        <input type="checkbox" class="form-check-input" id="skip_confirmation" name="skip_confirmation" value="1" checked>
+        <label class="form-check-label" for="skip_confirmation">Skip confirmation step ("hardcore mode")</label>
+      </div>
 
-<button id="record-button" class="btn btn-danger mb-3" aria-label="Hold to start recording">Hold to Record</button>
+      <!-- Hold to Record Button -->
+      <button id="record-button" class="btn btn-danger mb-3" aria-label="Hold to start recording">Hold to Record</button>
 
-<div id="recording-indicator" class="text-danger fw-bold mb-3" style="display: none;">
-  Recording...
-</div>
+      <!-- Recording Indicator -->
+      <div id="recording-indicator" class="text-danger fw-bold mb-3" style="display: none;">
+        Recording...
+      </div>
 
-<form action="/submit" method="post" class="mb-4">
-  <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
-  <div class="mb-3">
-    <%= label_tag :input_box, "Transcription", class: "form-label" %>
-    <%= text_area_tag :input, @input || "", id: "input_box", rows: 3, placeholder: "Dictation will appear here...", class: "form-control", lang: "en" %>
-  </div>
-  <button type="submit" class="btn btn-primary">Submit</button>
-</form>
+      <!-- Transcription Form -->
+      <form action="/submit" method="post" class="mb-4">
+        <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+        <div class="mb-3">
+          <%= label_tag :input_box, "Transcription", class: "form-label" %>
+          <%= text_area_tag :input, @input || "", id: "input_box", rows: 3, placeholder: "Dictation will appear here...", class: "form-control", lang: "en" %>
+        </div>
+        <button type="submit" class="btn btn-primary">Submit</button>
+      </form>
 
-<h3>Example Prompts</h3>
-<ol>
-  <li>I need to add cumin to my shopping list</li>
-  <li>I spoke to Lydia Wang from my Digital Marketing class. We both have to finish the LinkedIn social media ads for SearchStax by Friday next week.</li>
-  <li>I spoke to Jivika. She can get me an interview with Notion.</li>
-  <li>I had a brilliant conversation with Professor Lil Mohan. We had a great conversation about the deterioration of incoming MBA students, year over-year.</li>
-  <li>Lorna just reminded me that I need to pick her up from the airport on Friday.</li>
-  <li>Need to buy cumin, black pepper, 1 yellow onion, 2 tomatoes, 4 eggplants, and a bottle of whiskey.</li>
-  <li>I was sitting next to Paul Kozhipatt in my Managing the Workplace class. He advised me to finish it before applying to Apple.</li>
-  <li>Dinner plan tonight: Lebanese Pita Bread, Manakish, Lamb Tagine, Roasted Garlic Hummus, and Roasted Parsnips.</li>
-</ol>
+      <!-- Example Prompts -->
+      <h3>Example Prompts</h3>
+      <ol>
+        <li>I need to add cumin to my shopping list</li>
+        <li>I spoke to Lydia Wang from my Digital Marketing class. We both have to finish the LinkedIn social media ads for SearchStax by Friday next week.</li>
+        <li>I spoke to Jivika. She can get me an interview with Notion.</li>
+        <li>I had a brilliant conversation with Professor Lil Mohan. We had a great conversation about the deterioration of incoming MBA students, year over-year.</li>
+        <li>Lorna just reminded me that I need to pick her up from the airport on Friday.</li>
+        <li>Need to buy cumin, black pepper, 1 yellow onion, 2 tomatoes, 4 eggplants, and a bottle of whiskey.</li>
+        <li>I was sitting next to Paul Kozhipatt in my Managing the Workplace class. He advised me to finish it before applying to Apple.</li>
+        <li>Dinner plan tonight: Lebanese Pita Bread, Manakish, Lamb Tagine, Roasted Garlic Hummus, and Roasted Parsnips.</li>
+      </ol>
 
-<!-- Bootstrap JS Bundle (Optional if you need Bootstrap's JS components) -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
+      <!-- Optional: Include Bootstrap JS Bundle -->
+      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
 
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-    let mediaRecorder;
-    let audioChunks = [];
-    let stream;
-    let isRecording = false;
-    let recordingStartTime;
-    const MIN_RECORDING_DURATION = 1000; // 1 second in milliseconds
+      <!-- JavaScript for Recording and Action Log -->
+      <script>
+        document.addEventListener('DOMContentLoaded', () => {
+          let mediaRecorder;
+          let audioChunks = [];
+          let stream;
+          let isRecording = false;
+          let recordingStartTime;
+          const MIN_RECORDING_DURATION = 1000; // 1 second in milliseconds
+          const MAX_RECORDING_DURATION = 60000; // 60 seconds
 
-    const recordButton = document.getElementById('record-button');
-    const inputBox = document.getElementById('input_box');
-    const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
-    const recordingIndicator = document.getElementById('recording-indicator');
-    const actionLogContainer = document.getElementById('action-log-container');
+          const recordButton = document.getElementById('record-button');
+          const inputBox = document.getElementById('input_box');
+          const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
+          const recordingIndicator = document.getElementById('recording-indicator');
+          const actionLogContainer = document.getElementById('action-log-container');
+          const noActivityMessage = document.getElementById('no-activity-message');
 
-    // Function to sanitize HTML to prevent XSS
-    const sanitizeHTML = (str) => {
-      const temp = document.createElement('div');
-      temp.textContent = str;
-      return temp.innerHTML;
-    };
-
-    // Function to start recording
-    const startRecording = async (event) => {
-      event.preventDefault();
-      if (isRecording) return;
-
-      try {
-        // Check microphone permission
-        let permissionStatus = 'prompt';
-        if (navigator.permissions) {
-          try {
-            const status = await navigator.permissions.query({ name: 'microphone' });
-            permissionStatus = status.state;
-          } catch (err) {
-            console.warn('Permissions API not fully supported:', err);
-          }
-        }
-
-        if (permissionStatus === 'denied') {
-          alert('Microphone access denied. Please enable it in your device settings.');
-          return;
-        }
-
-        // Request media
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('Microphone access granted');
-
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 128000 });
-
-        mediaRecorder.ondataavailable = event => {
-          if (event.data.size > 0) {
-            audioChunks.push(event.data);
-          }
-        };
-
-        mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          audioChunks = []; // Reset for next recording
-
-          const recordingDuration = (Date.now() - recordingStartTime) / 1000; // in seconds
-          console.log('Recording Duration:', recordingDuration, 'seconds');
-
-          if (recordingDuration < 1) { // Minimum 1 second
-            alert('Recorded audio is too short. Please try again.');
-            // Optionally, send a log to remote logging service
-            // Sentry.captureMessage('Recorded audio too short.');
-            return;
-          }
-
-          const formData = new FormData();
-          formData.append('audio_file', audioBlob, 'recording.webm');
-          formData.append('authenticity_token', '<%= form_authenticity_token %>');
-
-          const hardcoreMode = hardcoreModeCheckbox.checked ? '1' : '0';
-          formData.append('skip_confirmation', hardcoreMode);
-
-          const fetchOptions = {
-            method: 'POST',
-            body: formData
+          // Function to sanitize HTML to prevent XSS
+          const sanitizeHTML = (str) => {
+            const temp = document.createElement('div');
+            temp.textContent = str;
+            return temp.innerHTML;
           };
 
-          if (hardcoreMode === '1') {
-            console.log('Submitting audio in hardcore mode');
-            fetch('/upload_audio', fetchOptions)
-              .then(response => {
-                if (!response.ok) {
-                  return response.json().then(errorData => { throw errorData; });
+          // Function to start recording
+          const startRecording = async (event) => {
+            event.preventDefault();
+            if (isRecording) return;
+
+            try {
+              // Check microphone permission
+              let permissionStatus = 'prompt';
+              if (navigator.permissions) {
+                try {
+                  const status = await navigator.permissions.query({ name: 'microphone' });
+                  permissionStatus = status.state;
+                } catch (err) {
+                  console.warn('Permissions API not fully supported:', err);
                 }
-                return response.json();
-              })
-              .then(data => {
-                console.log('Response received:', data);
-                if (data.success) {
-                  if (data.action_log && Array.isArray(data.action_log)) {
-                    displayActionLog(data.action_log);
+              }
+
+              if (permissionStatus === 'denied') {
+                alert('Microphone access denied. Please enable it in your device settings.');
+                return;
+              }
+
+              // Request media
+              stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              console.log('Microphone access granted');
+
+              // Determine supported MIME type
+              const supportedMimeTypes = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/ogg;codecs=opus',
+                'audio/mp4'
+              ];
+              let mimeType = '';
+              for (let type of supportedMimeTypes) {
+                if (MediaRecorder.isTypeSupported(type)) {
+                  mimeType = type;
+                  break;
+                }
+              }
+
+              if (!mimeType) {
+                alert('Your browser does not support audio recording in a compatible format.');
+                return;
+              }
+
+              mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType, audioBitsPerSecond: 128000 });
+
+              mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                  audioChunks.push(event.data);
+                }
+              };
+
+              mediaRecorder.onstop = () => {
+                console.log('mediaRecorder stopped');
+                const audioBlob = new Blob(audioChunks, { type: mimeType });
+                audioChunks = []; // Reset for next recording
+
+                const recordingDuration = (Date.now() - recordingStartTime) / 1000; // in seconds
+                console.log('Recording Duration:', recordingDuration, 'seconds');
+
+                if (recordingDuration < 1) { // Minimum 1 second
+                  alert('Recorded audio is too short. Please try again.');
+                  // Hide recording indicator and enable button
+                  recordingIndicator.style.display = 'none';
+                  recordButton.disabled = false;
+                  isRecording = false;
+                  // Stop all audio tracks to release the microphone
+                  if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    console.log('Audio tracks stopped');
                   }
+                  return;
+                }
+
+                // Optional: Stop recording after MAX_RECORDING_DURATION
+                // setTimeout(() => {
+                //   if (mediaRecorder && isRecording) {
+                //     mediaRecorder.stop();
+                //   }
+                // }, MAX_RECORDING_DURATION);
+
+                const formData = new FormData();
+                const fileExtension = mimeType.includes('ogg') ? 'ogg' :
+                                      mimeType.includes('mp4') ? 'mp4' : 'webm';
+                const fileName = `recording.${fileExtension}`;
+                formData.append('audio_file', audioBlob, fileName);
+                formData.append('authenticity_token', '<%= form_authenticity_token %>');
+
+                const hardcoreMode = hardcoreModeCheckbox.checked ? '1' : '0';
+                formData.append('skip_confirmation', hardcoreMode);
+
+                const fetchOptions = {
+                  method: 'POST',
+                  body: formData
+                };
+
+                if (hardcoreMode === '1') {
+                  console.log('Submitting audio in hardcore mode');
+                  fetch('/upload_audio', fetchOptions)
+                    .then(response => {
+                      if (!response.ok) {
+                        return response.json().then(errorData => { throw errorData; });
+                      }
+                      return response.json();
+                    })
+                    .then(data => {
+                      console.log('Response received:', data);
+                      if (data.success) {
+                        if (data.action_log && Array.isArray(data.action_log)) {
+                          displayActionLog(data.action_log);
+                        }
+                        // Hide recording indicator and enable button
+                        recordingIndicator.style.display = 'none';
+                        recordButton.disabled = false;
+                        isRecording = false;
+                        // Stop all audio tracks to release the microphone
+                        if (stream) {
+                          stream.getTracks().forEach(track => track.stop());
+                          console.log('Audio tracks stopped');
+                        }
+                      } else {
+                        alert(data.error || 'An error occurred during processing.');
+                        console.error('Processing failed:', data.error);
+                        // Hide recording indicator and enable button
+                        recordingIndicator.style.display = 'none';
+                        recordButton.disabled = false;
+                        isRecording = false;
+                        // Stop all audio tracks to release the microphone
+                        if (stream) {
+                          stream.getTracks().forEach(track => track.stop());
+                          console.log('Audio tracks stopped');
+                        }
+                      }
+                    })
+                    .catch(error => {
+                      console.error('Fetch error:', error);
+                      alert(error.error || 'An error occurred during processing.');
+                      // Hide recording indicator and enable button
+                      recordingIndicator.style.display = 'none';
+                      recordButton.disabled = false;
+                      isRecording = false;
+                      // Stop all audio tracks to release the microphone
+                      if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                        console.log('Audio tracks stopped');
+                      }
+                    });
                 } else {
-                  alert(data.error || 'An error occurred during processing.');
-                  console.error('Processing failed:', data.error);
+                  console.log('Submitting audio in normal mode');
+                  fetch('/upload_audio', fetchOptions)
+                    .then(response => {
+                      if (!response.ok) {
+                        return response.json().then(errorData => { throw errorData; });
+                      }
+                      return response.json();
+                    })
+                    .then(data => {
+                      console.log('Response received:', data);
+                      if (data.transcription) {
+                        inputBox.value = data.transcription;
+                        console.log('Textarea updated with transcription');
+                      } else {
+                        alert('No transcription received.');
+                        console.warn('No transcription in response');
+                      }
+                      // Hide recording indicator and enable button
+                      recordingIndicator.style.display = 'none';
+                      recordButton.disabled = false;
+                      isRecording = false;
+                      // Stop all audio tracks to release the microphone
+                      if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                        console.log('Audio tracks stopped');
+                      }
+                    })
+                    .catch(error => {
+                      console.error('Fetch error:', error);
+                      alert(error.error || 'An error occurred during transcription.');
+                      // Hide recording indicator and enable button
+                      recordingIndicator.style.display = 'none';
+                      recordButton.disabled = false;
+                      isRecording = false;
+                      // Stop all audio tracks to release the microphone
+                      if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                        console.log('Audio tracks stopped');
+                      }
+                    });
                 }
-              })
-              .catch(error => {
-                console.error('Fetch error:', error);
-                alert(error.error || 'An error occurred during processing.');
+              };
+
+              mediaRecorder.onerror = event => {
+                console.error('MediaRecorder error:', event.error);
+                alert('An error occurred during recording.');
+                // Hide recording indicator and enable button
+                recordingIndicator.style.display = 'none';
+                recordButton.disabled = false;
+                isRecording = false;
+                // Stop all audio tracks to release the microphone
+                if (stream) {
+                  stream.getTracks().forEach(track => track.stop());
+                  console.log('Audio tracks stopped');
+                }
+              };
+
+              mediaRecorder.start();
+              recordingStartTime = Date.now();
+              recordingIndicator.style.display = 'block';
+              recordButton.disabled = true;
+              isRecording = true;
+              console.log('Recording started');
+
+              // Optional: Stop recording after MAX_RECORDING_DURATION
+              // setTimeout(() => {
+              //   if (mediaRecorder && isRecording) {
+              //     mediaRecorder.stop();
+              //   }
+              // }, MAX_RECORDING_DURATION);
+            };
+
+            // Function to stop recording
+            const stopRecording = (event) => {
+              event.preventDefault();
+              if (!isRecording) return;
+
+              console.log('Stopping recording');
+              mediaRecorder.stop();
+            };
+
+            // Function to display the Action Log with descriptive messages and hyperlinks
+            const displayActionLog = (actionLog) => {
+              // Remove existing dynamic-action-log if present to avoid duplicates
+              let existingActionLogDiv = document.getElementById('dynamic-action-log');
+              if (existingActionLogDiv) {
+                existingActionLogDiv.remove();
+              }
+
+              // Create a new Action Log section
+              let actionLogDiv = document.createElement('div');
+              actionLogDiv.id = 'dynamic-action-log';
+              actionLogDiv.classList.add('bg-info', 'text-white', 'p-3', 'rounded', 'mb-4');
+
+              let header = document.createElement('h3');
+              header.textContent = 'Success!';
+              actionLogDiv.appendChild(header);
+
+              let pagesCreatedHeader = document.createElement('h4');
+              pagesCreatedHeader.textContent = 'Pages Created:';
+              actionLogDiv.appendChild(pagesCreatedHeader);
+
+              let ulPages = document.createElement('ul');
+
+              actionLog.forEach(entry => {
+                if (entry.url) {
+                  let li = document.createElement('li');
+                  li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
+                  ulPages.appendChild(li);
+                }
               });
-          } else {
-            console.log('Submitting audio in normal mode');
-            fetch('/upload_audio', fetchOptions)
-              .then(response => {
-                if (!response.ok) {
-                  return response.json().then(errorData => { throw errorData; });
-                }
-                return response.json();
-              })
-              .then(data => {
-                console.log('Response received:', data);
-                if (data.transcription) {
-                  inputBox.value = data.transcription;
-                  console.log('Textarea updated with transcription');
-                } else {
-                  alert('No transcription received.');
-                  console.warn('No transcription in response');
-                }
-              })
-              .catch(error => {
-                console.error('Fetch error:', error);
-                alert(error.error || 'An error occurred during transcription.');
-              });
-          }
 
-          // Stop all audio tracks to release the microphone
-          if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            console.log('Audio tracks stopped');
-          }
-        };
+              actionLogDiv.appendChild(ulPages);
 
-        mediaRecorder.onerror = event => {
-          console.error('MediaRecorder error:', event.error);
-          alert('An error occurred during recording.');
-          recordingIndicator.style.display = 'none';
-          recordButton.disabled = false;
-          // Optionally, send a log to remote logging service
-          // Sentry.captureException(event.error);
-        };
+              // Handle relations added if any
+              let relations = actionLog.filter(entry => entry.message.startsWith('Updated'));
+              if (relations.length > 0) {
+                let relationsHeader = document.createElement('h4');
+                relationsHeader.textContent = 'Relations Added:';
+                actionLogDiv.appendChild(relationsHeader);
 
-        mediaRecorder.start();
-        recordingStartTime = Date.now();
-        recordingIndicator.style.display = 'block';
-        recordButton.disabled = true;
-        isRecording = true;
-        console.log('Recording started');
-      } catch (err) {
-        console.error('Error accessing microphone:', err);
-        alert('An error occurred while accessing the microphone.');
-        // Optionally, send a log to remote logging service
-        // Sentry.captureException(err);
-      }
-    };
+                let ulRelations = document.createElement('ul');
 
-    // Function to stop recording
-    const stopRecording = (event) => {
-      event.preventDefault();
-      if (!isRecording) return;
+                relations.forEach(entry => {
+                  if (entry.url) {
+                    let li = document.createElement('li');
+                    li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
+                    ulRelations.appendChild(li);
+                  } else {
+                    let li = document.createElement('li');
+                    li.textContent = sanitizeHTML(entry.message);
+                    ulRelations.appendChild(li);
+                  }
+                });
 
-      console.log('Stopping recording');
-      mediaRecorder.stop();
-      recordingIndicator.style.display = 'none';
-      recordButton.disabled = false;
-      isRecording = false;
-    };
+                actionLogDiv.appendChild(ulRelations);
+              }
 
-    // Function to display the Action Log with descriptive messages and hyperlinks
-    const displayActionLog = (actionLog) => {
-      // Remove existing dynamic-action-log if present to avoid duplicates
-      let existingActionLogDiv = document.getElementById('dynamic-action-log');
-      if (existingActionLogDiv) {
-        existingActionLogDiv.remove();
-      }
+              // Prepend the new Action Log to the container
+              actionLogContainer.prepend(actionLogDiv);
 
-      // Create a new Action Log section
-      let actionLogDiv = document.createElement('div');
-      actionLogDiv.id = 'dynamic-action-log';
-      actionLogDiv.classList.add('bg-info', 'text-white', 'p-3', 'rounded', 'mb-4');
+              // Hide "No recent activity" message if action log is present
+              if (actionLogContainer.querySelector('ul').children.length > 0) {
+                noActivityMessage.style.display = 'none';
+              }
+            };
 
-      let header = document.createElement('h3');
-      header.textContent = 'Success!';
-      actionLogDiv.appendChild(header);
+            // Event listeners for mouse and touch events
+            recordButton.addEventListener('mousedown', startRecording);
+            recordButton.addEventListener('mouseup', stopRecording);
+            recordButton.addEventListener('mouseleave', (event) => {
+              if (isRecording) {
+                stopRecording(event);
+              }
+            });
 
-      let pagesCreatedHeader = document.createElement('h4');
-      pagesCreatedHeader.textContent = 'Pages Created:';
-      actionLogDiv.appendChild(pagesCreatedHeader);
+            recordButton.addEventListener('touchstart', startRecording, { passive: false });
+            recordButton.addEventListener('touchend', stopRecording, { passive: false });
+            recordButton.addEventListener('touchcancel', stopRecording, { passive: false });
 
-      let ulPages = document.createElement('ul');
+            // Prevent context menu on long press (especially on mobile)
+            recordButton.addEventListener('contextmenu', (event) => {
+              event.preventDefault();
+            });
 
-      actionLog.forEach(entry => {
-        if (entry.url) {
-          let li = document.createElement('li');
-          li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
-          ulPages.appendChild(li);
-        }
-      });
+            // Accessibility: Handle keyboard events (Space and Enter)
+            recordButton.addEventListener('keydown', (event) => {
+              if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault();
+                startRecording(event);
+              }
+            });
 
-      actionLogDiv.appendChild(ulPages);
-
-      // Handle relations added if any
-      let relations = actionLog.filter(entry => entry.message.startsWith('Updated'));
-      if (relations.length > 0) {
-        let relationsHeader = document.createElement('h4');
-        relationsHeader.textContent = 'Relations Added:';
-        actionLogDiv.appendChild(relationsHeader);
-
-        let ulRelations = document.createElement('ul');
-
-        relations.forEach(entry => {
-          if (entry.url) {
-            let li = document.createElement('li');
-            li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
-            ulRelations.appendChild(li);
-          } else {
-            let li = document.createElement('li');
-            li.textContent = sanitizeHTML(entry.message);
-            ulRelations.appendChild(li);
-          }
-        });
-
-        actionLogDiv.appendChild(ulRelations);
-      }
-
-      actionLogContainer.prepend(actionLogDiv);
-    };
-
-    // Event listeners for pointer and touch events
-    recordButton.addEventListener('pointerdown', startRecording);
-    recordButton.addEventListener('pointerup', stopRecording);
-    recordButton.addEventListener('pointercancel', stopRecording);
-
-    recordButton.addEventListener('touchstart', startRecording, { passive: false });
-    recordButton.addEventListener('touchend', stopRecording, { passive: false });
-    recordButton.addEventListener('touchcancel', stopRecording, { passive: false });
-
-    // Prevent context menu on long press (especially on mobile)
-    recordButton.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-    });
-
-    // Accessibility: Handle keyboard events (Space and Enter)
-    recordButton.addEventListener('keydown', (event) => {
-      if (event.key === ' ' || event.key === 'Enter') {
-        event.preventDefault();
-        startRecording(event);
-      }
-    });
-
-    recordButton.addEventListener('keyup', (event) => {
-      if (event.key === ' ' || event.key === 'Enter') {
-        event.preventDefault();
-        stopRecording(event);
-      }
-    });
-  });
-</script>
+            recordButton.addEventListener('keyup', (event) => {
+              if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault();
+                stopRecording(event);
+              }
+            });
+          });
+        </script>
+      </div>
+    </body>
+  </html>
