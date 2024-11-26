@@ -86,7 +86,7 @@ class MainController < ApplicationController
 
   def upload_audio
     audio_file = params[:audio_file]
-    skip_confirmation = params[:skip_confirmation]
+    skip_confirmation = params[:skip_confirmation] == '1'
     Rails.logger.debug "Received upload_audio request. Audio file present: #{audio_file.present?}, Skip Confirmation: #{skip_confirmation}"
 
     if audio_file
@@ -116,10 +116,15 @@ class MainController < ApplicationController
           Rails.logger.debug "Processing transcription in hardcore mode."
           result = process_transcription(transcription)
           Rails.logger.debug "process_transcription() method complete."
-          render json: result
+
+          if result[:success]
+            render json: { success: true, action_log: result[:action_log] }, status: :ok
+          else
+            render json: { success: false, error: result[:error] }, status: :unprocessable_entity
+          end
         else
           Rails.logger.debug "Returning transcription for manual confirmation."
-          render json: { transcription: transcription }
+          render json: { transcription: transcription }, status: :ok
         end
       rescue => e
         Rails.logger.error "Exception in upload_audio: #{e.message}"
@@ -130,9 +135,59 @@ class MainController < ApplicationController
       Rails.logger.warn "No audio file received in upload_audio."
       render json: { error: 'No audio file received.' }, status: :unprocessable_entity
     end
-  end  
+  end
 
   private
+
+  def process_transcription(transcription)
+    Rails.logger.debug "Starting process_transcription."
+    openai_service = OpenaiService.new
+    @note = transcription
+    @todays_date = Date.today.strftime("%Y-%m-%d")
+    @result = openai_service.classify_message(message: @note)
+
+    notion_service = NotionService.new
+
+    Rails.logger.debug "Parsing result: #{@result}"
+    case @result
+    when "note"
+      @body = openai_service.extract_note_body(message: @note)
+      @title = openai_service.extract_note_title(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      Rails.logger.debug "Note metadata extracted."
+      create_note_in_notion(notion_service)
+    when "task"
+      @task = openai_service.extract_task_summary(message: @note)
+      @deadline = openai_service.extract_deadline(message: @note)
+      @action_date = openai_service.extract_action_date(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      create_task_in_notion(notion_service)
+    when "recommendation"
+      @recommendation = openai_service.extract_recommendation_summary(message: @note)
+      @recommendation_type = openai_service.extract_recommendation_type(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      create_recommendation_in_notion(notion_service)
+    when "ingredient"
+      @ingredients = openai_service.extract_ingredients(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      notion_service.update_ingredients(@ingredients)
+    when "recipe"
+      @recipes = openai_service.extract_recipes(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note)
+      notion_service.update_recipes(@recipes)
+    else
+      Rails.logger.error "Could not classify the transcription."
+      return { success: false, error: 'Could not classify the transcription.' }
+    end
+
+    # Consolidate Action Log messages (array of hashes)
+    action_log = notion_service.action_log
+    Rails.logger.debug "Item processing complete."
+    return { success: true, action_log: action_log }
+  rescue => e
+    Rails.logger.error "Processing transcription failed: #{e.message}"
+    return { success: false, error: 'An error occurred during processing.' }
+  end
 
   def process_note(notion_service)
     openai_service = OpenaiService.new
@@ -258,55 +313,6 @@ class MainController < ApplicationController
     end
 
     return(relations_hash)
-  end
-
-  def process_transcription(transcription)
-    Rails.logger.debug "Starting process_transcription."
-    openai_service = OpenaiService.new
-    @note = transcription
-    @todays_date = Date.today.strftime("%Y-%m-%d")
-    @result = openai_service.classify_message(message: @note)
-
-    notion_service = NotionService.new
-
-    Rails.logger.debug "Parsing result: #{@result}"
-    case @result
-    when "note"
-      @body = openai_service.extract_note_body(message: @note)
-      @title = openai_service.extract_note_title(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
-      Rails.logger.debug "Note metadata extracted."
-      create_note_in_notion(notion_service)
-    when "task"
-      @task = openai_service.extract_task_summary(message: @note)
-      @deadline = openai_service.extract_deadline(message: @note)
-      @action_date = openai_service.extract_action_date(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
-      create_task_in_notion(notion_service)
-    when "recommendation"
-      @recommendation = openai_service.extract_recommendation_summary(message: @note)
-      @recommendation_type = openai_service.extract_recommendation_type(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
-      create_recommendation_in_notion(notion_service)
-    when "ingredient"
-      @ingredients = openai_service.extract_ingredients(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
-      notion_service.update_ingredients(@ingredients)
-    when "recipe"
-      @recipes = openai_service.extract_recipes(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
-      notion_service.update_recipes(@recipes)
-    else
-      return { success: false, error: 'Could not classify the transcription.' }
-    end
-    
-    # Consolidate Action Log messages (array of hashes)
-    action_log = notion_service.action_log
-    return {success: true}
-    Rails.logger.debug "Item processing complete."
-    rescue => e
-      Rails.logger.error "Processing transcription failed: #{e.message}"
-      return { success: false, error: 'An error occurred during processing.' }
   end
 
   def get_relation_field_for_entity_type(entity_type, item_type)

@@ -6,6 +6,24 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
+
+    <style>
+      /* Optional: Add some custom styles for better UX */
+      #record-button.recording {
+        background-color: #dc3545; /* Bootstrap danger color */
+        color: white;
+      }
+      #record-button.processing {
+        background-color: #ffc107; /* Bootstrap warning color */
+        color: black;
+      }
+      #processing-indicator {
+        display: none;
+        color: #ffc107;
+        font-weight: bold;
+        margin-bottom: 1rem;
+      }
+    </style>
   </head>
 
   <body>
@@ -75,458 +93,233 @@
         <li>Dinner plan tonight: Lebanese Pita Bread, Manakish, Lamb Tagine, Roasted Garlic Hummus, and Roasted Parsnips.</li>
       </ol>
 
-      <!-- Optional: Include Bootstrap JS Bundle -->
+      <!-- Include Bootstrap JS Bundle -->
       <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 
       <!-- JavaScript for Recording and Action Log -->
-      <script>
-        document.addEventListener('DOMContentLoaded', () => {
-          console.log('JavaScript Loaded');
+      <script> document.addEventListener('DOMContentLoaded', () => {
+        console.log('JavaScript Loaded');
 
-          // DOM Elements
-          const recordButton = document.getElementById('record-button');
-          const recordingIndicator = document.getElementById('recording-indicator');
-          const inputBox = document.getElementById('input_box');
-          const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
-          const actionLogContainer = document.getElementById('action-log-container');
-          const noActivityMessage = document.getElementById('no-activity-message');
+        // DOM Elements
+        const recordButton = document.getElementById('record-button');
+        const recordingIndicator = document.getElementById('recording-indicator');
+        const inputBox = document.getElementById('input_box');
+        const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
+        const actionLogContainer = document.getElementById('action-log-container');
+        const noActivityMessage = document.getElementById('no-activity-message');
 
-          // Variables
-          let mediaRecorder = null; // Initialize as null for clarity
-          let audioChunks = [];
-          let stream = null;
-          let isRecording = false;
-          let recordingStartTime = 0;
-          const MIN_RECORDING_DURATION = 1000; // 1 second in milliseconds
-          const MAX_RECORDING_DURATION = 60000; // 60 seconds
+        // Variables
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
 
-          // Function to sanitize HTML to prevent XSS
-          const sanitizeHTML = (str) => {
-            const temp = document.createElement('div');
-            temp.textContent = str;
-            return temp.innerHTML;
-          };
+        // Function to sanitize HTML to prevent XSS
+        const sanitizeHTML = (str) => {
+          const temp = document.createElement('div');
+          temp.textContent = str;
+          return temp.innerHTML;
+        };
 
-          // Function to start recording
-          const startRecording = async (event) => {
-            event.preventDefault();
-            console.log('Start Recording Called');
-
-            try {
-              // Check microphone permission
-              let permissionStatus = 'prompt';
-              if (navigator.permissions) {
-                try {
-                  const status = await navigator.permissions.query({ name: 'microphone' });
-                  permissionStatus = status.state;
-                  console.log('Microphone permission status:', permissionStatus);
-                } catch (err) {
-                  console.warn('Permissions API not fully supported:', err);
-                }
-              }
-
-              if (permissionStatus === 'denied') {
-                alert('Microphone access denied. Please enable it in your device settings.');
-                return false;
-              }
-
-              // Request media
-              stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              console.log('Microphone access granted');
-
-              // Determine supported MIME type
-              const supportedMimeTypes = [
-                'audio/webm;codecs=opus',
-                'audio/webm',
-                'audio/ogg;codecs=opus',
-                'audio/mp4'
-              ];
-              let mimeType = '';
-              for (let type of supportedMimeTypes) {
-                if (MediaRecorder.isTypeSupported(type)) {
-                  mimeType = type;
-                  break;
-                }
-              }
-
-              if (!mimeType) {
-                alert('Your browser does not support audio recording in a compatible format.');
-                return false;
-              }
-
-              console.log('Selected MIME type:', mimeType);
-
-              // Initialize MediaRecorder
-              mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType, audioBitsPerSecond: 128000 });
-              console.log('mediaRecorder initialized:', mediaRecorder);
-
-              // Set isRecording to true after successful initialization
-              isRecording = true;
-              console.log('isRecording set to true');
-
-              // Handle data availability
-              mediaRecorder.ondataavailable = event => {
-                if (event.data.size > 0) {
-                  audioChunks.push(event.data);
-                  console.log('Data available:', event.data.size, 'bytes');
-                }
-              };
-
-              // Handle stop event
-              mediaRecorder.onstop = () => {
-                console.log('mediaRecorder stopped');
-                const audioBlob = new Blob(audioChunks, { type: mimeType });
-                console.log('Audio Blob created:', audioBlob);
-                audioChunks = []; // Reset for next recording
-
-                const recordingDuration = (Date.now() - recordingStartTime) / 1000; // in seconds
-                console.log('Recording Duration:', recordingDuration, 'seconds');
-
-                if (recordingDuration < 1) { // Minimum 1 second
-                  alert('Recorded audio is too short. Please try again.');
-                  // Hide recording indicator and enable button
-                  recordingIndicator.style.display = 'none';
-                  recordButton.disabled = false;
-                  isRecording = false;
-                  console.log('Recording duration too short. Resetting state.');
-
-                  // Stop all audio tracks to release the microphone
-                  if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                    console.log('Audio tracks stopped due to short duration');
-                  }
-                  return;
-                }
-
-                // Prepare form data
-                const formData = new FormData();
-                const fileExtension = mimeType.includes('ogg') ? 'ogg' :
-                                      mimeType.includes('mp4') ? 'mp4' : 'webm';
-                const fileName = `recording.${fileExtension}`;
-                formData.append('audio_file', audioBlob, fileName);
-                formData.append('authenticity_token', '<%= form_authenticity_token %>');
-
-                const hardcoreMode = hardcoreModeCheckbox.checked ? '1' : '0';
-                formData.append('skip_confirmation', hardcoreMode);
-                console.log('FormData prepared with:', {
-                  fileName,
-                  hardcoreMode
-                });
-
-                const fetchOptions = {
-                  method: 'POST',
-                  body: formData
-                };
-
-                if (hardcoreMode === '1') {
-                  console.log('Submitting audio in hardcore mode');
-                  fetch('/upload_audio', fetchOptions)
-                    .then(response => {
-                      console.log('Fetch response status:', response.status);
-                      if (!response.ok) {
-                        return response.json().then(errorData => { throw errorData; });
-                      }
-                      return response.json();
-                    })
-                    .then(data => {
-                      console.log('Response received:', data);
-                      if (data.success) {
-                        if (data.action_log && Array.isArray(data.action_log)) {
-                          displayActionLog(data.action_log);
-                        }
-                        // Hide recording indicator and enable button
-                        recordingIndicator.style.display = 'none';
-                        recordButton.disabled = false;
-                        isRecording = false;
-                        console.log('Recording session completed successfully.');
-
-                        // Stop all audio tracks to release the microphone
-                        if (stream) {
-                          stream.getTracks().forEach(track => track.stop());
-                          console.log('Audio tracks stopped after successful submission');
-                        }
-                      } else {
-                        alert(data.error || 'An error occurred during processing.');
-                        console.error('Processing failed:', data.error);
-                        // Hide recording indicator and enable button
-                        recordingIndicator.style.display = 'none';
-                        recordButton.disabled = false;
-                        isRecording = false;
-                        console.log('Recording session failed.');
-
-                        // Stop all audio tracks to release the microphone
-                        if (stream) {
-                          stream.getTracks().forEach(track => track.stop());
-                          console.log('Audio tracks stopped after failed submission');
-                        }
-                      }
-                    })
-                    .catch(error => { // Removed inline comment
-                      console.error('Fetch error:', error);
-                      alert(error.error || 'An error occurred during processing.');
-                      // Hide recording indicator and enable button
-                      recordingIndicator.style.display = 'none';
-                      recordButton.disabled = false;
-                      isRecording = false;
-                      console.log('Error caught during fetch.');
-
-                      // Stop all audio tracks to release the microphone
-                      if (stream) {
-                        stream.getTracks().forEach(track => track.stop());
-                        console.log('Audio tracks stopped due to fetch error');
-                      }
-                    });
-                } else {
-                  console.log('Submitting audio in normal mode');
-                  fetch('/upload_audio', fetchOptions)
-                    .then(response => {
-                      console.log('Fetch response status:', response.status);
-                      if (!response.ok) {
-                        return response.json().then(errorData => { throw errorData; });
-                      }
-                      return response.json();
-                    })
-                    .then(data => {
-                      console.log('Response received:', data);
-                      if (data.transcription) {
-                        inputBox.value = data.transcription;
-                        console.log('Textarea updated with transcription');
-                      } else {
-                        alert('No transcription received.');
-                        console.warn('No transcription in response');
-                      }
-                      // Hide recording indicator and enable button
-                      recordingIndicator.style.display = 'none';
-                      recordButton.disabled = false;
-                      isRecording = false;
-                      console.log('Recording session completed successfully.');
-
-                      // Stop all audio tracks to release the microphone
-                      if (stream) {
-                        stream.getTracks().forEach(track => track.stop());
-                        console.log('Audio tracks stopped after successful transcription');
-                      }
-                    })
-                    .catch(error => { // Removed inline comment
-                      console.error('Fetch error:', error);
-                      alert(error.error || 'An error occurred during transcription.');
-                      // Hide recording indicator and enable button
-                      recordingIndicator.style.display = 'none';
-                      recordButton.disabled = false;
-                      isRecording = false;
-                      console.log('Error caught during fetch.');
-
-                      // Stop all audio tracks to release the microphone
-                      if (stream) {
-                        stream.getTracks().forEach(track => track.stop());
-                        console.log('Audio tracks stopped due to fetch error');
-                      }
-                    });
-                }
-              } catch (error) {
-                console.error('Error during recording:', error);
-                alert('An error occurred while trying to start recording.');
-                isRecording = false;
-                // Hide recording indicator and enable button
-                recordingIndicator.style.display = 'none';
-                recordButton.disabled = false;
-                console.log('Exception caught in startRecording.');
-
-                // Stop all audio tracks to release the microphone if they exist
-                if (stream) {
-                  stream.getTracks().forEach(track => track.stop());
-                  console.log('Audio tracks stopped due to error');
-                }
-              }
-            };
-
-            // Function to stop recording
-            const stopRecording = (event) => {
-              event.preventDefault();
-              console.log('Stop Recording Called');
-
-              if (!isRecording) {
-                console.log('Not currently recording. Ignoring stop request.');
-                return;
-              }
-
-              console.log('Stopping recording');
-
-              if (mediaRecorder) {
-                mediaRecorder.stop();
-                console.log('mediaRecorder.stop() called');
-              } else {
-                console.error('mediaRecorder is undefined');
-                alert('An error occurred: mediaRecorder is not initialized.');
-                // Reset state just in case
-                recordingIndicator.style.display = 'none';
-                recordButton.disabled = false;
-                isRecording = false;
-              }
-            };
-
-            // Function to display the Action Log with descriptive messages and hyperlinks
-            const displayActionLog = (actionLog) => {
-              console.log('Displaying Action Log');
-              // Remove existing dynamic-action-log if present to avoid duplicates
-              let existingActionLogDiv = document.getElementById('dynamic-action-log');
-              if (existingActionLogDiv) {
-                existingActionLogDiv.remove();
-                console.log('Existing dynamic-action-log removed');
-              }
-
-              // Create a new Action Log section
-              let actionLogDiv = document.createElement('div');
-              actionLogDiv.id = 'dynamic-action-log';
-              actionLogDiv.classList.add('bg-info', 'text-white', 'p-3', 'rounded', 'mb-4');
-
-              let header = document.createElement('h3');
-              header.textContent = 'Success!';
-              actionLogDiv.appendChild(header);
-
-              let pagesCreatedHeader = document.createElement('h4');
-              pagesCreatedHeader.textContent = 'Pages Created:';
-              actionLogDiv.appendChild(pagesCreatedHeader);
-
-              let ulPages = document.createElement('ul');
-
-              actionLog.forEach(entry => {
-                if (entry.url) {
-                  let li = document.createElement('li');
-                  li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
-                  ulPages.appendChild(li);
-                }
-              });
-
-              actionLogDiv.appendChild(ulPages);
-
-              // Handle relations added if any
-              let relations = actionLog.filter(entry => entry.message.startsWith('Updated'));
-              if (relations.length > 0) {
-                let relationsHeader = document.createElement('h4');
-                relationsHeader.textContent = 'Relations Added:';
-                actionLogDiv.appendChild(relationsHeader);
-
-                let ulRelations = document.createElement('ul');
-
-                relations.forEach(entry => {
-                  if (entry.url) {
-                    let li = document.createElement('li');
-                    li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
-                    ulRelations.appendChild(li);
-                  } else {
-                    let li = document.createElement('li');
-                    li.textContent = sanitizeHTML(entry.message);
-                    ulRelations.appendChild(li);
-                  }
-                });
-
-                actionLogDiv.appendChild(ulRelations);
-              }
-
-              // Prepend the new Action Log to the container
-              actionLogContainer.prepend(actionLogDiv);
-              console.log('New Action Log appended to the container');
-
-              // Hide "No recent activity" message if action log is present
-              if (actionLogContainer.querySelector('ul').children.length > 0) {
-                noActivityMessage.style.display = 'none';
-                console.log('"No recent activity" message hidden');
-              }
-            };
-
-            // Event listeners for mouse and touch events with enhanced handling
-            const handleStartEvent = async (event) => {
-              if (isRecording) {
-                console.log('Already recording. Ignoring start event.');
-                return;
-              }
-              console.log('Handling start event:', event.type);
-              recordingStartTime = Date.now();
-              recordingIndicator.style.display = 'block';
-              recordButton.disabled = true;
-
-              const success = await startRecording(event);
-              if (!success) {
-                // If recording failed to start, reset UI elements
-                recordingIndicator.style.display = 'none';
-                recordButton.disabled = false;
-              }
-            };
-
-            const handleStopEvent = (event) => {
-              console.log('Handling stop event:', event.type);
-              stopRecording(event);
-            };
-
-            // Mouse Events
-            recordButton.addEventListener('mousedown', handleStartEvent);
-            recordButton.addEventListener('mouseup', handleStopEvent);
-            recordButton.addEventListener('mouseleave', handleStopEvent);
-
-            // Touch Events
-            recordButton.addEventListener('touchstart', (event) => {
-              event.preventDefault(); // Prevent default touch behavior
-              handleStartEvent(event);
-            }, { passive: false });
-            recordButton.addEventListener('touchend', handleStopEvent, { passive: false });
-            recordButton.addEventListener('touchcancel', handleStopEvent, { passive: false });
-
-            // Prevent context menu on long press (especially on mobile)
-            recordButton.addEventListener('contextmenu', (event) => {
-              event.preventDefault();
-            });
-
-            // Accessibility: Handle keyboard events (Space and Enter)
-            recordButton.addEventListener('keydown', (event) => {
-              if (event.key === ' ' || event.key === 'Enter') {
-                if (isRecording) {
-                  console.log('Already recording. Ignoring keydown event.');
-                  return;
-                }
-                console.log('Keyboard event detected:', event.key);
-                event.preventDefault();
-                handleStartEvent(event);
-              }
-            });
-
-            recordButton.addEventListener('keyup', (event) => {
-              if (event.key === ' ' || event.key === 'Enter') {
-                if (!isRecording) {
-                  console.log('Not recording. Ignoring keyup event.');
-                  return;
-                }
-                console.log('Keyboard event detected:', event.key);
-                event.preventDefault();
-                handleStopEvent(event);
-              }
-            });
-
-            // Feature Detection for MediaRecorder API
+        // Function to start recording
+        const startRecording = async () => {
+          try {
+            // Check for MediaRecorder support
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
               alert('Your browser does not support audio recording.');
-              recordButton.disabled = true;
-              console.error('MediaRecorder API not supported in this browser.');
-            } else {
-              // Optionally, preemptively request microphone access
-              const requestMicrophoneAccess = async () => {
-                try {
-                  const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                  // Stop all tracks immediately after obtaining permission
-                  tempStream.getTracks().forEach(track => track.stop());
-                  console.log('Microphone permission granted.');
-                } catch (err) {
-                  console.warn('Microphone access denied:', err);
-                  alert('Microphone access is required to use this feature. Please enable it in your device settings.');
-                  recordButton.disabled = true;
-                }
-              };
-
-              // Request microphone access when the page loads
-              requestMicrophoneAccess();
+              return false;
             }
 
-        }); // End of DOMContentLoaded
+            // Request microphone access
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            // Event handler for data availability
+            mediaRecorder.ondataavailable = (event) => {
+              if (event.data.size > 0) {
+                audioChunks.push(event.data);
+              }
+            };
+
+            // Event handler for stopping the recorder
+            mediaRecorder.onstop = handleRecordingStop;
+
+            // Start recording
+            mediaRecorder.start();
+            isRecording = true;
+            recordingIndicator.style.display = 'block';
+            console.log('Recording started');
+            return true;
+          } catch (error) {
+            console.error('Error starting recording:', error);
+            alert('An error occurred while trying to start recording.');
+            return false;
+          }
+        };
+
+        // Function to stop recording
+        const stopRecording = () => {
+          if (!isRecording || !mediaRecorder) return;
+
+          mediaRecorder.stop();
+          isRecording = false;
+          recordingIndicator.style.display = 'none';
+          console.log('Recording stopped');
+        };
+
+        // Function to handle the recording stop event
+        const handleRecordingStop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          audioChunks = []; // Reset for next recording
+
+          // Prepare form data
+          const formData = new FormData();
+          formData.append('audio_file', audioBlob, 'recording.webm');
+          formData.append('authenticity_token', '<%= form_authenticity_token %>');
+          formData.append('skip_confirmation', hardcoreModeCheckbox.checked ? '1' : '0');
+
+          try {
+            const response = await fetch('/upload_audio', {
+              method: 'POST',
+              body: formData
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw errorData;
+            }
+
+            const data = await response.json();
+            console.log('Fetch response:', data);
+
+            if (hardcoreModeCheckbox.checked) {
+              if (data.action_log && data.action_log.length > 0) {
+                displayActionLog(data.action_log);
+              } else {
+                alert('No action log received.');
+              }
+            } else if (data.transcription) {
+              inputBox.value = sanitizeHTML(data.transcription);
+            } else {
+              alert('Unexpected response from the server.');
+            }
+          } catch (error) {
+            console.error('Fetch error:', error);
+            alert(error.error || 'An error occurred during processing.');
+          }
+        };
+
+        // Function to display the Action Log
+        const displayActionLog = (actionLog) => {
+          // Remove existing dynamic-action-log if present
+          const existingActionLogDiv = document.getElementById('dynamic-action-log');
+          if (existingActionLogDiv) {
+            existingActionLogDiv.remove();
+          }
+
+          // Create a new Action Log section
+          const actionLogDiv = document.createElement('div');
+          actionLogDiv.id = 'dynamic-action-log';
+          actionLogDiv.className = 'bg-info text-white p-3 rounded mb-4';
+
+          const header = document.createElement('h3');
+          header.textContent = 'Success!';
+          actionLogDiv.appendChild(header);
+
+          const pagesCreatedHeader = document.createElement('h4');
+          pagesCreatedHeader.textContent = 'Pages Created:';
+          actionLogDiv.appendChild(pagesCreatedHeader);
+
+          const ulPages = document.createElement('ul');
+
+          actionLog.forEach(entry => {
+            if (entry.url) {
+              const li = document.createElement('li');
+              li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
+              ulPages.appendChild(li);
+            } else {
+              const li = document.createElement('li');
+              li.textContent = sanitizeHTML(entry.message);
+              ulPages.appendChild(li);
+            }
+          });
+
+          actionLogDiv.appendChild(ulPages);
+
+          // Handle relations added if any
+          const relations = actionLog.filter(entry => entry.message.startsWith('Updated'));
+          if (relations.length > 0) {
+            const relationsHeader = document.createElement('h4');
+            relationsHeader.textContent = 'Relations Added:';
+            actionLogDiv.appendChild(relationsHeader);
+
+            const ulRelations = document.createElement('ul');
+
+            relations.forEach(entry => {
+              if (entry.url) {
+                const li = document.createElement('li');
+                li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
+                ulRelations.appendChild(li);
+              } else {
+                const li = document.createElement('li');
+                li.textContent = sanitizeHTML(entry.message);
+                ulRelations.appendChild(li);
+              }
+            });
+
+            actionLogDiv.appendChild(ulRelations);
+          }
+
+          // Prepend the new Action Log to the container
+          actionLogContainer.prepend(actionLogDiv);
+          console.log('Action log displayed');
+
+          // Hide "No recent activity" message
+          if (actionLogContainer.querySelector('ul').children.length > 0) {
+            noActivityMessage.style.display = 'none';
+          }
+        };
+
+        // Event listeners for pointer events and keyboard events
+        const handleStartEvent = async (event) => {
+          event.preventDefault();
+          const success = await startRecording();
+          if (!success) {
+            // If recording failed to start, reset UI elements
+            recordingIndicator.style.display = 'none';
+            recordButton.disabled = false;
+          }
+        };
+
+        const handleStopEvent = (event) => {
+          event.preventDefault();
+          stopRecording();
+        };
+
+        // Pointer Events
+        recordButton.addEventListener('pointerdown', handleStartEvent);
+        recordButton.addEventListener('pointerup', handleStopEvent);
+        recordButton.addEventListener('pointerleave', (event) => {
+          if (isRecording) {
+            handleStopEvent(event);
+          }
+        });
+
+        // Prevent default behavior for pointer events to avoid accidental clicks
+        recordButton.addEventListener('pointercancel', handleStopEvent);
+
+        // Accessibility: Handle keyboard events (Space and Enter)
+        recordButton.addEventListener('keydown', (event) => {
+          if ((event.key === ' ' || event.key === 'Enter') && !isRecording) {
+            handleStartEvent(event);
+          }
+        });
+
+        recordButton.addEventListener('keyup', (event) => {
+          if ((event.key === ' ' || event.key === 'Enter') && isRecording) {
+            handleStopEvent(event);
+          }
+        });
+        });
       </script>
     </div>
   </body>
