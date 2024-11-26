@@ -105,7 +105,7 @@ class MainController < ApplicationController
         FileUtils.mkdir_p(File.dirname(temp_audio_path))
         File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
         Rails.logger.debug "Audio file saved successfully. Size: #{File.size(temp_audio_path)} bytes."
-
+  
         # Check file size (e.g., minimum 1KB)
         if File.size(temp_audio_path) < 1000
           Rails.logger.error "Audio file too small: #{File.size(temp_audio_path)} bytes."
@@ -113,26 +113,35 @@ class MainController < ApplicationController
           render json: { error: 'Audio file is too short. Please record a longer message.' }, status: :unprocessable_entity
           return
         end
-
+  
         # Convert WebM to WAV using FFmpeg
         converted_audio_path = Rails.root.join('tmp', 'uploads', "converted_#{SecureRandom.uuid}.wav")
         movie = FFMPEG::Movie.new(temp_audio_path.to_s)
-        transcoding_options = { audio_codec: "pcm_s16le", channels: 1, audio_bitrate: 128, custom: %w(-ar 16000) } # OpenAI prefers 16kHz
+        transcoding_options = { 
+          audio_codec: "pcm_s16le", 
+          channels: 1, 
+          custom: %w(-ar 16000) 
+        } # Removed audio_bitrate
+  
         movie.transcode(converted_audio_path.to_s, transcoding_options) do |progress|
-          Rails.logger.debug "Transcoding progress: #{(progress * 100).to_i}%"
+          if progress.finite?
+            Rails.logger.debug "Transcoding progress: #{(progress * 100).to_i}%"
+          else
+            Rails.logger.warn "Transcoding progress: Infinity"
+          end
         end
-
+  
         Rails.logger.debug "Audio file converted successfully to WAV. Size: #{File.size(converted_audio_path)} bytes."
-
+  
         openai_service = OpenaiService.new
         transcription = openai_service.transcribe_audio(audio_file_path: converted_audio_path.to_s)
         Rails.logger.debug "Transcription received: #{transcription}"
-
+  
         if skip_confirmation
           Rails.logger.debug "Processing transcription in hardcore mode."
           result = process_transcription(transcription)
           Rails.logger.debug "process_transcription() method complete."
-
+  
           if result[:success]
             flash[:transcription] = transcription
             flash[:notice] = result[:action_log]
