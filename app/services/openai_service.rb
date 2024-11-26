@@ -48,9 +48,9 @@ class OpenaiService
         messages: [
           {
             role: "system",
-            content: "Return only one of 'note', 'task', 'ingredient', 'recipe', 'recommendation' (as in book, song, or other media recommendation), or 'idea' without quotes to best classify the message. 
+            content: "Return only one of 'note', 'task', 'ingredient', 'recipe', 'recommendation' (as in book, song, person, or other media recommendation), or 'idea' without quotes to best classify the message. 
                 If ambiguous, always default to 'note'. 
-                Use 'idea' only if something is specified as an idea, otherwise defer to note.
+                Use 'idea' only if something is specified as an idea, otherwise defer to 'note' (always without quotes).
                 Never respond otherwise."
           },
           { role: "user", content: message }
