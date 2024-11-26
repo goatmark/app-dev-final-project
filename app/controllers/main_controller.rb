@@ -11,7 +11,7 @@ class MainController < ApplicationController
 
   def submit
     @note = params.fetch("input", "")
-    skip_confirmation = (params.fetch("skip_confirmation") || flash[:skip_confirmation])
+    skip_confirmation = (params.fetch("skip_confirmation", false) || flash[:skip_confirmation])
     redirect_to("/processing", flash: { note: @note, skip_confirmation: skip_confirmation })
   end
 
@@ -52,8 +52,7 @@ class MainController < ApplicationController
       @date = params[:todays_date]
       @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
       create_note_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log
-      redirect_to "/"
+      redirect_to("/", flash: { notice: notion_service.action_log})
     when "task"
       @task = params[:task]
       @deadline = params[:deadline]
@@ -101,14 +100,8 @@ class MainController < ApplicationController
         if skip_confirmation
           Rails.logger.debug "Processing transcription in hardcore mode."
           result = process_transcription(transcription)
-          if result[:success]
-            Rails.logger.debug "Transcription processed successfully."
-            # Return the action_log array in the JSON response
-            render json: { success: true, action_log: result[:message] }
-          else
-            Rails.logger.error "Error processing transcription: #{result[:error]}"
-            render json: { success: false, error: result[:error] }
-          end
+          Rails.logger.debug "process_transcription() method complete."
+          render json: result
         else
           Rails.logger.debug "Returning transcription for manual confirmation."
           render json: { transcription: transcription }
@@ -229,9 +222,12 @@ class MainController < ApplicationController
     if page_id && relations_hash.any?
       notion_service.add_relations_to_page(page_id: page_id, relations_hash: relations_hash, item_type: item_type)
     end
+
+    return(relations_hash)
   end
 
   def process_transcription(transcription)
+    Rails.logger.debug "Starting process_transcription."
     openai_service = OpenaiService.new
     @note = transcription
     @todays_date = Date.today.strftime("%Y-%m-%d")
@@ -239,11 +235,13 @@ class MainController < ApplicationController
 
     notion_service = NotionService.new
 
+    Rails.logger.debug "Parsing result."
     case @result
     when "note"
       @body = openai_service.extract_note_body(message: @note)
       @title = openai_service.extract_note_title(message: @note)
       @related_entities = openai_service.extract_related_entities(message: @note)
+      Rails.logger.debug "Note metadata extracted."
       create_note_in_notion(notion_service)
     when "task"
       @task = openai_service.extract_task_summary(message: @note)
@@ -263,12 +261,14 @@ class MainController < ApplicationController
       return { success: false, error: 'Could not classify the transcription.' }
     end
 
+    
     # Consolidate Action Log messages (array of hashes)
     action_log = notion_service.action_log
+    return {success: true}
+    Rails.logger.debug "Item processing complete."
     rescue => e
       Rails.logger.error "Processing transcription failed: #{e.message}"
-      { success: false, error: 'An error occurred during processing.' }
-
+      return { success: false, error: 'An error occurred during processing.' }
   end
 
   def get_relation_field_for_entity_type(entity_type, item_type)
