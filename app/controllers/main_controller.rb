@@ -161,6 +161,25 @@ class MainController < ApplicationController
     end
   end
 
+  def process_recommendation
+    openai_service = OpenaiService.new
+    notion_service = NotionService.new
+
+    @recommendation = openai_service.extract_recommendation_summary(message: @note)
+    @recommendation_type = openai_service.extract_recommendation_type(message: @note)
+    @related_entities = openai_service.extract_related_entities(message: @note) || []
+
+    process_entities(notion_service, nil, 'recommendation')
+
+    if @skip_confirmation
+      create_recommendation_in_notion(notion_service)
+      flash[:notice] = notion_service.action_log
+      redirect_to "/"
+    else
+      render template: "main_templates/processing"
+    end
+  end
+
   def process_ingredients
     openai_service = OpenaiService.new
     notion_service = NotionService.new
@@ -203,6 +222,11 @@ class MainController < ApplicationController
   def create_task_in_notion(notion_service)
     new_task = notion_service.add_task(task_name: @task, deadline: @deadline, action_date: @action_date, relations: @related_entities)
     process_entities(notion_service, new_task['id'], 'task')
+  end
+
+  def create_recommendation_in_notion(notion_service)
+    new_recommendation = notion_service.add_recommendation(name: @recommendation, type: @recommendation_type, relations: @related_entities)
+    process_entities(notion_service, new_recommendation['id'], 'recommendation')
   end
 
   def process_entities(notion_service, page_id, item_type)
@@ -257,6 +281,12 @@ class MainController < ApplicationController
       @recipes = openai_service.extract_recipes(message: @note)
       @related_entities = openai_service.extract_related_entities(message: @note)
       notion_service.update_recipes(@recipes)
+    when "recommendation"
+      @recommendation = openai_service.extract_recommendation_summary(message: @note)
+      @recommendation_type = openai_service.extract_recommendation_type(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note) || []
+      notion_service.create_recommendation_in_notion(@recommendation)
+
     else
       return { success: false, error: 'Could not classify the transcription.' }
     end

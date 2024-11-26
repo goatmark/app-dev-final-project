@@ -74,6 +74,36 @@ class OpenaiService
     return task_summary
   end
 
+  def extract_recommendation_summary(message:)
+    response = @client.chat(
+      parameters: {
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "Extract only the identified piece of media (book title, article title, etc). Only include the title. Do not include any other text. Do not include author name or any other information." },
+          { role: "user", content: message }
+        ],
+        temperature: 0.7
+      }
+    )
+    recommendation_summary = response.dig("choices", 0, "message", "content").strip
+    return recommendation_summary
+  end
+
+  def extract_recommendation_type(message:)
+    response = @client.chat(
+      parameters: {
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "Return only: 'Article', 'Book', or 'Podcast' without quotes based on what the piece of media identified in the message is most likely to belong to." },
+          { role: "user", content: message }
+        ],
+        temperature: 0.7
+      }
+    )
+    recommendation_summary = response.dig("choices", 0, "message", "content").strip
+    return recommendation_summary
+  end
+
   def extract_deadline(message:)
     today = Date.today
     dow = today.strftime('%A')
