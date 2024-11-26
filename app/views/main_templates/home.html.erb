@@ -28,6 +28,12 @@
       #permission-message, #permission-granted-indicator {
         margin-bottom: 1rem;
       }
+
+      /* Styles for Grant Button */
+      #grant-mic-button {
+        display: none; /* Initially hidden */
+        margin-bottom: 1rem;
+      }
     </style>
   </head>
 
@@ -40,15 +46,17 @@
 
       <!-- Permission Messages -->
       <div id="permission-message" class="alert alert-warning" style="display: none;">
-        Microphone access is required for recording. Please enable it in your browser settings.
+        Microphone access is required for recording. Please grant access to use the recording feature.
       </div>
       <div id="permission-granted-indicator" class="text-success fw-bold mb-3" style="display: none;">
         Microphone access granted. You can start recording.
       </div>
       <div id="permission-denied-indicator" class="alert alert-danger" style="display: none;">
         Microphone access denied. Please allow access to use the recording feature.
-        <button id="retry-permission" class="btn btn-primary btn-sm mt-2">Retry Permission</button>
       </div>
+
+      <!-- Grant Microphone Access Button -->
+      <button id="grant-mic-button" class="btn btn-primary mb-3">Grant Microphone Access</button>
 
       <!-- Hold to Record Button -->
       <button id="record-button" class="btn btn-danger mb-3" aria-label="Hold to start recording" aria-pressed="false">
@@ -114,13 +122,7 @@
       <h3>Example Prompts</h3>
       <ol>
         <li>I need to add cumin to my shopping list</li>
-        <li>I spoke to Lydia Wang from my Digital Marketing class. We both have to finish the LinkedIn social media ads for SearchStax by Friday next week.</li>
-        <li>I spoke to Jivika. She can get me an interview with Notion.</li>
-        <li>I had a brilliant conversation with Professor Lil Mohan. We had a great conversation about the deterioration of incoming MBA students, year over year.</li>
-        <li>Lorna just reminded me that I need to pick her up from the airport on Friday.</li>
-        <li>Need to buy cumin, black pepper, 1 yellow onion, 2 tomatoes, 4 eggplants, and a bottle of whiskey.</li>
-        <li>I was sitting next to Paul Kozhipatt in my Managing the Workplace class. He advised me to finish it before applying to Apple.</li>
-        <li>Dinner plan tonight: Lebanese Pita Bread, Manakish, Lamb Tagine, Roasted Garlic Hummus, and Roasted Parsnips.</li>
+        <!-- ... other prompts ... -->
       </ol>
 
       <!-- Include Bootstrap JS Bundle -->
@@ -133,6 +135,7 @@
 
           // DOM Elements
           const recordButton = document.getElementById('record-button');
+          const grantMicButton = document.getElementById('grant-mic-button');
           const recordingIndicator = document.getElementById('recording-indicator');
           const inputBox = document.getElementById('input_box');
           const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
@@ -142,7 +145,6 @@
           const permissionMessage = document.getElementById('permission-message');
           const permissionGrantedIndicator = document.getElementById('permission-granted-indicator');
           const permissionDeniedIndicator = document.getElementById('permission-denied-indicator');
-          const retryPermissionButton = document.getElementById('retry-permission');
 
           // Variables
           let mediaRecorder = null;
@@ -157,35 +159,16 @@
             return temp.innerHTML;
           };
 
-          // Function to request microphone access on load
+          // Function to request microphone access
           const requestMicrophoneAccess = async () => {
-            if (localStorage.getItem('micPermissionRequested')) {
-              // Check permission status
-              const permission = await navigator.permissions.query({ name: 'microphone' });
-              if (permission.state === 'granted') {
-                microphonePermissionGranted = true;
-                permissionGrantedIndicator.style.display = 'block';
-                permissionMessage.style.display = 'none';
-                permissionDeniedIndicator.style.display = 'none';
-                console.log('Microphone permission already granted.');
-              } else if (permission.state === 'denied') {
-                microphonePermissionGranted = false;
-                permissionDeniedIndicator.style.display = 'block';
-                permissionMessage.style.display = 'none';
-                permissionGrantedIndicator.style.display = 'none';
-                console.log('Microphone permission already denied.');
-              }
-              return;
-            }
-
             try {
               const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
               microphonePermissionGranted = true;
-              localStorage.setItem('micPermissionRequested', 'true');
               permissionGrantedIndicator.style.display = 'block';
               permissionMessage.style.display = 'none';
               permissionDeniedIndicator.style.display = 'none';
-              console.log('Microphone permission granted on load.');
+              grantMicButton.style.display = 'none';
+              console.log('Microphone permission granted.');
               // Stop the stream immediately as we only needed to get permission
               stream.getTracks().forEach(track => track.stop());
             } catch (error) {
@@ -193,29 +176,65 @@
               microphonePermissionGranted = false;
               permissionDeniedIndicator.style.display = 'block';
               permissionMessage.style.display = 'none';
+              grantMicButton.style.display = 'block';
             }
           };
 
-          // Call the permission request on load
-          requestMicrophoneAccess();
+          // Event Listener for Grant Microphone Access Button
+          grantMicButton.addEventListener('click', async () => {
+            await requestMicrophoneAccess();
+          });
 
-          // Retry Permission Access
-          if (retryPermissionButton) {
-            retryPermissionButton.addEventListener('click', () => {
-              // Remove the previous denial
-              localStorage.removeItem('micPermissionRequested');
-              permissionDeniedIndicator.style.display = 'none';
+          // Function to check microphone permission status
+          const checkMicrophonePermission = async () => {
+            if (navigator.permissions) {
+              try {
+                const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+                microphonePermissionGranted = (permissionStatus.state === 'granted');
+                if (microphonePermissionGranted) {
+                  permissionGrantedIndicator.style.display = 'block';
+                  permissionDeniedIndicator.style.display = 'none';
+                  grantMicButton.style.display = 'none';
+                } else if (permissionStatus.state === 'denied') {
+                  permissionDeniedIndicator.style.display = 'block';
+                  permissionGrantedIndicator.style.display = 'none';
+                  grantMicButton.style.display = 'block';
+                } else {
+                  permissionMessage.style.display = 'block';
+                  permissionGrantedIndicator.style.display = 'none';
+                  permissionDeniedIndicator.style.display = 'none';
+                  grantMicButton.style.display = 'none';
+                }
+              } catch (error) {
+                console.warn('Permissions API not fully supported:', error);
+                // Fallback if Permissions API is not supported
+                microphonePermissionGranted = false;
+                permissionMessage.style.display = 'block';
+                permissionDeniedIndicator.style.display = 'none';
+                permissionGrantedIndicator.style.display = 'none';
+                grantMicButton.style.display = 'none';
+              }
+            } else {
+              console.warn('Permissions API not supported in this browser.');
+              // Fallback if Permissions API is not supported
+              microphonePermissionGranted = false;
               permissionMessage.style.display = 'block';
-              // Attempt to request permission again
-              requestMicrophoneAccess();
-            });
-          }
+              permissionDeniedIndicator.style.display = 'none';
+              permissionGrantedIndicator.style.display = 'none';
+              grantMicButton.style.display = 'none';
+            }
+          };
+
+          // Initial check for microphone permission
+          checkMicrophonePermission();
 
           // Function to start recording
           const startRecording = async () => {
             if (!microphonePermissionGranted) {
-              alert('Microphone access is not granted. Please allow access to use the recording feature.');
-              return false;
+              // Show the grant microphone access button
+              permissionMessage.style.display = 'block';
+              grantMicButton.style.display = 'block';
+              return;
             }
 
             try {
@@ -238,11 +257,9 @@
               recordingIndicator.style.display = 'block';
               recordButton.classList.add('recording');
               console.log('Recording started');
-              return true;
             } catch (error) {
               console.error('Error starting recording:', error);
               alert('An error occurred while trying to start recording.');
-              return false;
             }
           };
 
@@ -367,13 +384,7 @@
           // Event listeners for pointer events and keyboard events
           const handleStartEvent = async (event) => {
             event.preventDefault();
-            const success = await startRecording();
-            if (!success) {
-              // If recording failed to start, reset UI elements
-              recordingIndicator.style.display = 'none';
-              recordButton.classList.remove('recording');
-              recordButton.disabled = false;
-            }
+            await startRecording();
           };
 
           const handleStopEvent = (event) => {
