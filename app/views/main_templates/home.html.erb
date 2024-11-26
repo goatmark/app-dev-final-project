@@ -1,4 +1,3 @@
-<!-- app/views/main_templates/home.html.erb -->
 <!DOCTYPE html>
 <html>
   <head>
@@ -38,36 +37,50 @@
         Hold to Record
       </button>
 
+      <!-- Hardcore Mode Checkbox -->
+      <div class="form-check mb-3">
+        <input type="checkbox" class="form-check-input" id="skip_confirmation" name="skip_confirmation" value="1" checked>
+        <label class="form-check-label" for="skip_confirmation">Skip confirmation step ("hardcore mode")</label>
+      </div>
+
       <!-- Recording Indicator -->
       <div id="recording-indicator" class="text-danger fw-bold mb-3" style="display: none;">
         Recording...
       </div>
 
       <!-- Action Log Container -->
-      <% if flash[:notice].present? && flash[:notice].any? %>
-        <div id="action-log-container" class="bg-info text-white p-3 rounded mb-4">
-          <h3>Action Log:</h3>
-          <ul>
-            <% flash[:notice].each do |entry| %>
-              <% if entry['url'] %>
-                <li>
-                  <strong><%= entry['message'] %></strong>:
-                  <a href="<%= entry['url'] %>" target="_blank" class="text-white"><u>View in Notion</u></a>
-                </li>
-              <% else %>
-                <li><%= entry['message'] %></li>
-              <% end %>
-            <% end %>
-          </ul>
+      <div id="action-log-container" class="bg-info text-white p-3 rounded mb-4">
+        <h3>Action Log:</h3>
+        
+        <!-- Transcription Section -->
+        <div id="transcription-section" class="mb-3">
+          <% if flash[:transcription].present? %>
+            <p><strong>Transcription:</strong> <%= sanitize(flash[:transcription]) %></p>
+          <% else %>
+            <p id="no-transcription-message">No transcription available.</p>
+          <% end %>
         </div>
-      <% else %>
-        <p id="no-activity-message">No recent activity.</p>
-      <% end %>
-
-      <!-- Hardcore Mode Checkbox -->
-      <div class="form-check mb-3">
-        <input type="checkbox" class="form-check-input" id="skip_confirmation" name="skip_confirmation" value="1" checked>
-        <label class="form-check-label" for="skip_confirmation">Skip confirmation step ("hardcore mode")</label>
+        
+        <!-- History Section -->
+        <div id="history-section">
+          <% if flash[:notice].present? && flash[:notice].any? %>
+            <h4>History:</h4>
+            <ul>
+              <% flash[:notice].each do |entry| %>
+                <% if entry['url'] %>
+                  <li>
+                    <strong><%= entry['message'] %></strong>:
+                    <a href="<%= entry['url'] %>" target="_blank" class="text-white"><u>View in Notion</u></a>
+                  </li>
+                <% else %>
+                  <li><%= entry['message'] %></li>
+                <% end %>
+              <% end %>
+            </ul>
+          <% else %>
+            <p id="no-history-message">No recent history.</p>
+          <% end %>
+        </div>
       </div>
 
       <!-- Transcription Form -->
@@ -75,7 +88,7 @@
         <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
         <div class="mb-3">
           <%= label_tag :input_box, "Transcription", class: "form-label" %>
-          <%= text_area_tag :input, @input || "", id: "input_box", rows: 3, placeholder: "Dictation will appear here...", class: "form-control", lang: "en" %>
+          <%= text_area_tag :input, @input || "", id: "input_box", rows: 5, placeholder: "Dictation will appear here...", class: "form-control", lang: "en" %>
         </div>
         <button type="submit" class="btn btn-primary">Submit</button>
       </form>
@@ -97,228 +110,222 @@
       <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 
       <!-- JavaScript for Recording and Action Log -->
-      <script> document.addEventListener('DOMContentLoaded', () => {
-        console.log('JavaScript Loaded');
+      <script>
+        document.addEventListener('DOMContentLoaded', () => {
+          console.log('JavaScript Loaded');
 
-        // DOM Elements
-        const recordButton = document.getElementById('record-button');
-        const recordingIndicator = document.getElementById('recording-indicator');
-        const inputBox = document.getElementById('input_box');
-        const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
-        const actionLogContainer = document.getElementById('action-log-container');
-        const noActivityMessage = document.getElementById('no-activity-message');
+          // DOM Elements
+          const recordButton = document.getElementById('record-button');
+          const recordingIndicator = document.getElementById('recording-indicator');
+          const inputBox = document.getElementById('input_box');
+          const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
+          const actionLogContainer = document.getElementById('action-log-container');
 
-        // Variables
-        let mediaRecorder = null;
-        let audioChunks = [];
-        let isRecording = false;
+          // Variables
+          let mediaRecorder = null;
+          let audioChunks = [];
+          let isRecording = false;
 
-        // Function to sanitize HTML to prevent XSS
-        const sanitizeHTML = (str) => {
-          const temp = document.createElement('div');
-          temp.textContent = str;
-          return temp.innerHTML;
-        };
+          // Function to sanitize HTML to prevent XSS
+          const sanitizeHTML = (str) => {
+            const temp = document.createElement('div');
+            temp.textContent = str;
+            return temp.innerHTML;
+          };
 
-        // Function to start recording
-        const startRecording = async () => {
-          try {
-            // Check for MediaRecorder support
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-              alert('Your browser does not support audio recording.');
+          // Function to start recording
+          const startRecording = async () => {
+            try {
+              // Check for MediaRecorder support
+              if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert('Your browser does not support audio recording.');
+                return false;
+              }
+
+              // Request microphone access
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              mediaRecorder = new MediaRecorder(stream);
+
+              // Event handler for data availability
+              mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                  audioChunks.push(event.data);
+                }
+              };
+
+              // Event handler for stopping the recorder
+              mediaRecorder.onstop = handleRecordingStop;
+
+              // Start recording
+              mediaRecorder.start();
+              isRecording = true;
+              recordingIndicator.style.display = 'block';
+              console.log('Recording started');
+              return true;
+            } catch (error) {
+              console.error('Error starting recording:', error);
+              alert('An error occurred while trying to start recording.');
               return false;
             }
+          };
 
-            // Request microphone access
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
+          // Function to stop recording
+          const stopRecording = () => {
+            if (!isRecording || !mediaRecorder) return;
 
-            // Event handler for data availability
-            mediaRecorder.ondataavailable = (event) => {
-              if (event.data.size > 0) {
-                audioChunks.push(event.data);
+            mediaRecorder.stop();
+            isRecording = false;
+            recordingIndicator.style.display = 'none';
+            console.log('Recording stopped');
+          };
+
+          // Function to handle the recording stop event
+          const handleRecordingStop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            audioChunks = []; // Reset for next recording
+
+            // Prepare form data
+            const formData = new FormData();
+            formData.append('audio_file', audioBlob, 'recording.webm');
+            formData.append('authenticity_token', '<%= form_authenticity_token %>');
+            formData.append('skip_confirmation', hardcoreModeCheckbox.checked ? '1' : '0');
+
+            try {
+              const response = await fetch('/upload_audio', {
+                method: 'POST',
+                body: formData
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw errorData;
               }
-            };
 
-            // Event handler for stopping the recorder
-            mediaRecorder.onstop = handleRecordingStop;
+              const data = await response.json();
+              console.log('Fetch response:', data);
 
-            // Start recording
-            mediaRecorder.start();
-            isRecording = true;
-            recordingIndicator.style.display = 'block';
-            console.log('Recording started');
-            return true;
-          } catch (error) {
-            console.error('Error starting recording:', error);
-            alert('An error occurred while trying to start recording.');
-            return false;
-          }
-        };
-
-        // Function to stop recording
-        const stopRecording = () => {
-          if (!isRecording || !mediaRecorder) return;
-
-          mediaRecorder.stop();
-          isRecording = false;
-          recordingIndicator.style.display = 'none';
-          console.log('Recording stopped');
-        };
-
-        // Function to handle the recording stop event
-        const handleRecordingStop = async () => {
-          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          audioChunks = []; // Reset for next recording
-
-          // Prepare form data
-          const formData = new FormData();
-          formData.append('audio_file', audioBlob, 'recording.webm');
-          formData.append('authenticity_token', '<%= form_authenticity_token %>');
-          formData.append('skip_confirmation', hardcoreModeCheckbox.checked ? '1' : '0');
-
-          try {
-            const response = await fetch('/upload_audio', {
-              method: 'POST',
-              body: formData
-            });
-
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw errorData;
-            }
-
-            const data = await response.json();
-            console.log('Fetch response:', data);
-
-            if (hardcoreModeCheckbox.checked) {
-              if (data.action_log && data.action_log.length > 0) {
-                displayActionLog(data.action_log);
+              if (hardcoreModeCheckbox.checked) {
+                if (data.action_log && data.action_log.length > 0) {
+                  displayActionLog(data.transcription, data.action_log);
+                } else {
+                  alert('No action log received.');
+                  if (data.transcription) {
+                    // Even if no action log, display transcription
+                    displayActionLog(data.transcription, []);
+                  }
+                }
+              } else if (data.transcription) {
+                inputBox.value = sanitizeHTML(data.transcription);
               } else {
-                alert('No action log received.');
+                alert('Unexpected response from the server.');
               }
-            } else if (data.transcription) {
-              inputBox.value = sanitizeHTML(data.transcription);
-            } else {
-              alert('Unexpected response from the server.');
+            } catch (error) {
+              console.error('Fetch error:', error);
+              alert(error.error || 'An error occurred during processing.');
             }
-          } catch (error) {
-            console.error('Fetch error:', error);
-            alert(error.error || 'An error occurred during processing.');
-          }
-        };
+          };
 
-        // Function to display the Action Log
-        const displayActionLog = (actionLog) => {
-          // Remove existing dynamic-action-log if present
-          const existingActionLogDiv = document.getElementById('dynamic-action-log');
-          if (existingActionLogDiv) {
-            existingActionLogDiv.remove();
-          }
+          // Function to display the Transcription and Action Log
+          const displayActionLog = (transcription, actionLog) => {
+            // Clear existing dynamic content
+            const existingDynamicContent = document.getElementById('dynamic-action-log');
+            if (existingDynamicContent) {
+              existingDynamicContent.remove();
+            }
 
-          // Create a new Action Log section
-          const actionLogDiv = document.createElement('div');
-          actionLogDiv.id = 'dynamic-action-log';
-          actionLogDiv.className = 'bg-info text-white p-3 rounded mb-4';
+            // Create a new Action Log section
+            const actionLogDiv = document.createElement('div');
+            actionLogDiv.id = 'dynamic-action-log';
+            actionLogDiv.className = 'bg-info text-white p-3 rounded mb-4';
 
-          const header = document.createElement('h3');
-          header.textContent = 'Success!';
-          actionLogDiv.appendChild(header);
+            // Transcription Section
+            if (transcription) {
+              const transcriptionHeader = document.createElement('h4');
+              transcriptionHeader.textContent = 'Transcription:';
+              actionLogDiv.appendChild(transcriptionHeader);
 
-          const pagesCreatedHeader = document.createElement('h4');
-          pagesCreatedHeader.textContent = 'Pages Created:';
-          actionLogDiv.appendChild(pagesCreatedHeader);
+              const transcriptionPara = document.createElement('p');
+              transcriptionPara.textContent = transcription;
+              actionLogDiv.appendChild(transcriptionPara);
+            }
 
-          const ulPages = document.createElement('ul');
+            // History Section
+            if (actionLog && actionLog.length > 0) {
+              const historyHeader = document.createElement('h4');
+              historyHeader.textContent = 'History:';
+              actionLogDiv.appendChild(historyHeader);
 
-          actionLog.forEach(entry => {
-            if (entry.url) {
-              const li = document.createElement('li');
-              li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
-              ulPages.appendChild(li);
-            } else {
-              const li = document.createElement('li');
-              li.textContent = sanitizeHTML(entry.message);
-              ulPages.appendChild(li);
+              const ulHistory = document.createElement('ul');
+
+              actionLog.forEach(entry => {
+                const li = document.createElement('li');
+                if (entry.url) {
+                  li.innerHTML = `<strong>${sanitizeHTML(entry.message)}</strong>: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
+                } else {
+                  li.textContent = sanitizeHTML(entry.message);
+                }
+                ulHistory.appendChild(li);
+              });
+
+              actionLogDiv.appendChild(ulHistory);
+            }
+
+            // Append the new Action Log to the container
+            actionLogContainer.appendChild(actionLogDiv);
+            console.log('Action log displayed');
+
+            // Hide "No recent activity" and "No transcription available" messages
+            if (transcription) {
+              const noTranscriptionMessage = document.getElementById('no-transcription-message');
+              if (noTranscriptionMessage) noTranscriptionMessage.style.display = 'none';
+            }
+
+            if (actionLog && actionLog.length > 0) {
+              const noActivityMessage = document.getElementById('no-activity-message');
+              if (noActivityMessage) noActivityMessage.style.display = 'none';
+            }
+          };
+
+          // Event listeners for pointer events and keyboard events
+          const handleStartEvent = async (event) => {
+            event.preventDefault();
+            const success = await startRecording();
+            if (!success) {
+              // If recording failed to start, reset UI elements
+              recordingIndicator.style.display = 'none';
+              recordButton.disabled = false;
+            }
+          };
+
+          const handleStopEvent = (event) => {
+            event.preventDefault();
+            stopRecording();
+          };
+
+          // Pointer Events
+          recordButton.addEventListener('pointerdown', handleStartEvent);
+          recordButton.addEventListener('pointerup', handleStopEvent);
+          recordButton.addEventListener('pointerleave', (event) => {
+            if (isRecording) {
+              handleStopEvent(event);
             }
           });
 
-          actionLogDiv.appendChild(ulPages);
+          // Prevent default behavior for pointer events to avoid accidental clicks
+          recordButton.addEventListener('pointercancel', handleStopEvent);
 
-          // Handle relations added if any
-          const relations = actionLog.filter(entry => entry.message.startsWith('Updated'));
-          if (relations.length > 0) {
-            const relationsHeader = document.createElement('h4');
-            relationsHeader.textContent = 'Relations Added:';
-            actionLogDiv.appendChild(relationsHeader);
+          // Accessibility: Handle keyboard events (Space and Enter)
+          recordButton.addEventListener('keydown', (event) => {
+            if ((event.key === ' ' || event.key === 'Enter') && !isRecording) {
+              handleStartEvent(event);
+            }
+          });
 
-            const ulRelations = document.createElement('ul');
-
-            relations.forEach(entry => {
-              if (entry.url) {
-                const li = document.createElement('li');
-                li.innerHTML = `${sanitizeHTML(entry.message)}: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
-                ulRelations.appendChild(li);
-              } else {
-                const li = document.createElement('li');
-                li.textContent = sanitizeHTML(entry.message);
-                ulRelations.appendChild(li);
-              }
-            });
-
-            actionLogDiv.appendChild(ulRelations);
-          }
-
-          // Prepend the new Action Log to the container
-          actionLogContainer.prepend(actionLogDiv);
-          console.log('Action log displayed');
-
-          // Hide "No recent activity" message
-          if (actionLogContainer.querySelector('ul').children.length > 0) {
-            noActivityMessage.style.display = 'none';
-          }
-        };
-
-        // Event listeners for pointer events and keyboard events
-        const handleStartEvent = async (event) => {
-          event.preventDefault();
-          const success = await startRecording();
-          if (!success) {
-            // If recording failed to start, reset UI elements
-            recordingIndicator.style.display = 'none';
-            recordButton.disabled = false;
-          }
-        };
-
-        const handleStopEvent = (event) => {
-          event.preventDefault();
-          stopRecording();
-        };
-
-        // Pointer Events
-        recordButton.addEventListener('pointerdown', handleStartEvent);
-        recordButton.addEventListener('pointerup', handleStopEvent);
-        recordButton.addEventListener('pointerleave', (event) => {
-          if (isRecording) {
-            handleStopEvent(event);
-          }
-        });
-
-        // Prevent default behavior for pointer events to avoid accidental clicks
-        recordButton.addEventListener('pointercancel', handleStopEvent);
-
-        // Accessibility: Handle keyboard events (Space and Enter)
-        recordButton.addEventListener('keydown', (event) => {
-          if ((event.key === ' ' || event.key === 'Enter') && !isRecording) {
-            handleStartEvent(event);
-          }
-        });
-
-        recordButton.addEventListener('keyup', (event) => {
-          if ((event.key === ' ' || event.key === 'Enter') && isRecording) {
-            handleStopEvent(event);
-          }
-        });
+          recordButton.addEventListener('keyup', (event) => {
+            if ((event.key === ' ' || event.key === 'Enter') && isRecording) {
+              handleStopEvent(event);
+            }
+          });
         });
       </script>
     </div>

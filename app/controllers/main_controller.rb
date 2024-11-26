@@ -1,10 +1,9 @@
-# app/controllers/main_controller.rb
-
 class MainController < ApplicationController
   protect_from_forgery except: :upload_audio
 
   def main
-    @action_log = flash[:notice] || ""
+    @action_log = flash[:notice] || []
+    @transcription = flash[:transcription] || ""
     @skip_confirmation = flash[:skip_confirmation] == '1'
     render(template: "main_templates/home")
   end
@@ -53,7 +52,9 @@ class MainController < ApplicationController
       @date = params[:todays_date]
       @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
       create_note_in_notion(notion_service)
-      redirect_to("/", flash: { notice: notion_service.action_log})
+      flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
+      redirect_to "/"
     when "task"
       @task = params[:task]
       @deadline = params[:deadline]
@@ -61,22 +62,26 @@ class MainController < ApplicationController
       @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
       create_task_in_notion(notion_service)
       flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
       redirect_to "/"
     when "recommendation"
       @recommendation = params[:recommendation]
       @recommendation_type = params[:recommendation_type]
       create_recommendation_in_notion(notion_service)
       flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
       redirect_to "/"
     when "ingredient"
       @ingredients = params[:ingredients].present? ? JSON.parse(params[:ingredients]) : []
       notion_service.update_ingredients(@ingredients)
       flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
       redirect_to "/"
     when "recipe"
       @recipes = params[:recipes].present? ? JSON.parse(params[:recipes]) : []
       notion_service.update_recipes(@recipes)
       flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
       redirect_to "/"
     else
       flash[:alert] = "Unknown result type."
@@ -109,16 +114,15 @@ class MainController < ApplicationController
         transcription = openai_service.transcribe_audio(audio_file_path: temp_audio_path.to_s)
         Rails.logger.debug "Transcription received: #{transcription}"
 
-        File.delete(temp_audio_path) if File.exist?(temp_audio_path)
-        Rails.logger.debug "Temporary audio file deleted."
-
         if skip_confirmation
           Rails.logger.debug "Processing transcription in hardcore mode."
           result = process_transcription(transcription)
           Rails.logger.debug "process_transcription() method complete."
 
           if result[:success]
-            render json: { success: true, action_log: result[:action_log] }, status: :ok
+            flash[:transcription] = transcription
+            flash[:notice] = result[:action_log]
+            render json: { success: true }, status: :ok
           else
             render json: { success: false, error: result[:error] }, status: :unprocessable_entity
           end
@@ -130,6 +134,11 @@ class MainController < ApplicationController
         Rails.logger.error "Exception in upload_audio: #{e.message}"
         Rails.logger.error e.backtrace.join("\n")
         render json: { error: 'An error occurred while processing the audio.' }, status: :internal_server_error
+      ensure
+        if File.exist?(temp_audio_path)
+          File.delete(temp_audio_path)
+          Rails.logger.debug "Temporary audio file deleted."
+        end
       end
     else
       Rails.logger.warn "No audio file received in upload_audio."
@@ -204,7 +213,9 @@ class MainController < ApplicationController
 
     if @skip_confirmation # hardcore mode turned on
       create_note_in_notion(notion_service)
-      redirect_to("/", flash: { notice: notion_service.action_log, skip_confirmation: @skip_confirmation })
+      flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
+      redirect_to("/")
     else
       render template: "main_templates/processing"
     end
@@ -223,6 +234,7 @@ class MainController < ApplicationController
     if @skip_confirmation
       create_task_in_notion(notion_service)
       flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
       redirect_to "/"
     else
       render template: "main_templates/processing"
@@ -241,6 +253,7 @@ class MainController < ApplicationController
     if @skip_confirmation
       create_recommendation_in_notion(notion_service)
       flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
       redirect_to "/"
     else
       render template: "main_templates/processing"
@@ -257,6 +270,7 @@ class MainController < ApplicationController
 
     if @skip_confirmation
       flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
       redirect_to "/"
     else
       render template: "main_templates/processing"
@@ -273,6 +287,7 @@ class MainController < ApplicationController
 
     if @skip_confirmation
       flash[:notice] = notion_service.action_log
+      flash[:transcription] = @note
       redirect_to "/"
     else
       render template: "main_templates/processing"
