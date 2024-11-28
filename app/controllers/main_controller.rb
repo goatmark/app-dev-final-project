@@ -1,4 +1,4 @@
-# app/controllers/main_controller.rb
+# app / controllers / main_controller.rb
 
 require 'streamio-ffmpeg'
 
