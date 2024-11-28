@@ -93,13 +93,19 @@
           width: 100%;
         }
       }
+
+      /* Styles for Grant Button */
+      #grant-mic-button {
+        display: none; /* Initially hidden */
+        margin-bottom: 1rem;
+      }
     </style>
   </head>
 
   <body>
     <div class="container">
       <h1 class="mb-4">Dictation App</h1>
-
+      
       <!-- Status Message -->
       <div id="status-message">Please enable microphone access to start recording.</div>
 
@@ -448,7 +454,6 @@
         const tr = document.createElement('tr');
         const timestampTd = document.createElement('td');
         const messageTd = document.createElement('td');
-
         const timestamp = new Date().toLocaleTimeString();
         timestampTd.textContent = timestamp;
         messageTd.textContent = message;
