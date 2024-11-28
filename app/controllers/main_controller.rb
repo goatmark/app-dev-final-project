@@ -3,10 +3,12 @@
 require 'streamio-ffmpeg'
 
 class MainController < ApplicationController
-  protect_from_forgery except: :upload_audio
+  protect_from_forgery except: [:upload_audio, :confirm_transcription, :fetch_events, :fetch_action_logs]
 
+  # Initialize separate logs
   def main
-    @action_log = flash[:notice] || []
+    @action_log = flash[:action_log] || []
+    @events = flash[:events] || []
     @transcription = flash[:transcription] || ""
     @skip_confirmation = flash[:skip_confirmation] == '1'
     render(template: "main_templates/home")
@@ -20,7 +22,7 @@ class MainController < ApplicationController
 
   def processing
     @note = flash[:note]
-    skip_confirmation = flash[:skip_confirmation]
+    @skip_confirmation = flash[:skip_confirmation]
     @todays_date = Date.today.strftime("%Y-%m-%d")
 
     openai_service = OpenaiService.new
@@ -39,7 +41,7 @@ class MainController < ApplicationController
     when "recommendation"
       process_recommendation(notion_service)
     when "idea"
-      # tbd
+      # TBD
     else
       redirect_to "/", alert: "Could not classify the transcription."
     end
@@ -56,7 +58,7 @@ class MainController < ApplicationController
       @date = params[:todays_date]
       @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
       create_note_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to "/"
     when "task"
@@ -65,26 +67,26 @@ class MainController < ApplicationController
       @action_date = params[:action_date]
       @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
       create_task_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to "/"
     when "recommendation"
       @recommendation = params[:recommendation]
       @recommendation_type = params[:recommendation_type]
       create_recommendation_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to "/"
     when "ingredient"
       @ingredients = params[:ingredients].present? ? JSON.parse(params[:ingredients]) : []
       notion_service.update_ingredients(@ingredients)
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to "/"
     when "recipe"
       @recipes = params[:recipes].present? ? JSON.parse(params[:recipes]) : []
       notion_service.update_recipes(@recipes)
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to "/"
     else
@@ -94,10 +96,10 @@ class MainController < ApplicationController
   end
 
   def upload_audio
-    audio_file = params[:audio_file]
-    skip_confirmation = params[:skip_confirmation] == '1'
-    Rails.logger.debug "Received upload_audio request. Audio file present: #{audio_file.present?}, Skip Confirmation: #{skip_confirmation}"
-    
+    audio_file = params[:audio]
+    hardcore_mode = params[:hardcore_mode] == '1'
+    Rails.logger.debug "Received upload_audio request. Audio file present: #{audio_file.present?}, Hardcore Mode: #{hardcore_mode}"
+
     if audio_file
       temp_audio_path = Rails.root.join('tmp', 'uploads', audio_file.original_filename)
       Rails.logger.debug "Saving audio to: #{temp_audio_path}"
@@ -137,14 +139,14 @@ class MainController < ApplicationController
         transcription = openai_service.transcribe_audio(audio_file_path: converted_audio_path.to_s)
         Rails.logger.debug "Transcription received: #{transcription}"
 
-        if skip_confirmation
+        if hardcore_mode
           Rails.logger.debug "Processing transcription in hardcore mode."
           result = process_transcription(transcription)
           Rails.logger.debug "process_transcription() method complete."
 
           if result[:success]
+            flash[:action_log] = result[:action_log]
             flash[:transcription] = transcription
-            flash[:notice] = result[:action_log]
             render json: { success: true, action_log: result[:action_log], transcription: transcription }, status: :ok
           else
             Rails.logger.error "Transcription processing failed: #{result[:error]}"
@@ -152,6 +154,9 @@ class MainController < ApplicationController
           end
         else
           Rails.logger.debug "Returning transcription for manual confirmation."
+          # Log the event
+          flash[:events] ||= []
+          flash[:events] << { timestamp: Time.now.strftime("%H:%M:%S"), message: 'Transcription received for confirmation.' }
           render json: { transcription: transcription }, status: :ok
         end
       rescue FFMPEG::Error => e
@@ -172,8 +177,41 @@ class MainController < ApplicationController
         end
       end
     else
-      Rails.logger.warn "No audio file received in upload_audio."
-      render json: { error: 'No audio file received.' }, status: :unprocessable_entity
+      render json: { error: 'No audio file uploaded.' }, status: :bad_request
+    end
+  end
+
+  def fetch_events
+    @events = flash[:events] || []
+    render json: { events: @events.map { |event| event[:message] } }, status: :ok
+  end
+
+  def fetch_action_logs
+    @action_log = flash[:action_log] || []
+    render json: { action_logs: @action_log.map { |action| action[:message] } }, status: :ok
+  end
+
+  def confirm_transcription
+    transcription = params[:transcription]
+    hardcore_mode = params[:hardcore_mode] == '1'
+
+    Rails.logger.debug "Received confirm_transcription request. Transcription: #{transcription}, Hardcore Mode: #{hardcore_mode}"
+
+    if hardcore_mode
+      # Directly process without confirmation
+      result = process_transcription(transcription)
+      if result[:success]
+        flash[:action_log] = result[:action_log]
+        flash[:transcription] = transcription
+        render json: { success: true, message: 'Transcription processed successfully.' }, status: :ok
+      else
+        render json: { success: false, error: result[:error] }, status: :unprocessable_entity
+      end
+    else
+      # Handle non-hardcore mode: Process transcription after user confirmation
+      flash[:action_log] = ['Transcription confirmed by user.'] # Example log
+      flash[:transcription] = transcription
+      render json: { success: true, message: 'Transcription confirmed.' }, status: :ok
     end
   end
 
@@ -185,41 +223,41 @@ class MainController < ApplicationController
     @note = transcription
     @todays_date = Date.today.strftime("%Y-%m-%d")
     @result = openai_service.classify_message(message: @note)
-  
+
     notion_service = NotionService.new
-  
+
     Rails.logger.debug "Parsing result: #{@result}"
     case @result
     when "note"
       @body = openai_service.extract_note_body(message: @note)
       @title = openai_service.extract_note_title(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note) || []
       Rails.logger.debug "Note metadata extracted."
       create_note_in_notion(notion_service)
     when "task"
       @task = openai_service.extract_task_summary(message: @note)
       @deadline = openai_service.extract_deadline(message: @note)
       @action_date = openai_service.extract_action_date(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note) || []
       create_task_in_notion(notion_service)
     when "recommendation"
       @recommendation = openai_service.extract_recommendation_summary(message: @note)
       @recommendation_type = openai_service.extract_recommendation_type(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
+      @related_entities = openai_service.extract_related_entities(message: @note) || []
       create_recommendation_in_notion(notion_service)
     when "ingredient"
-      @ingredients = openai_service.extract_ingredients(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
+      @ingredients = openai_service.extract_ingredients(message: @note) || []
+      @related_entities = openai_service.extract_related_entities(message: @note) || []
       notion_service.update_ingredients(@ingredients)
     when "recipe"
-      @recipes = openai_service.extract_recipes(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note)
+      @recipes = openai_service.extract_recipes(message: @note) || []
+      @related_entities = openai_service.extract_related_entities(message: @note) || []
       notion_service.update_recipes(@recipes)
     else
       Rails.logger.error "Could not classify the transcription."
       return { success: false, error: 'Could not classify the transcription.' }
     end
-  
+
     # Consolidate Action Log messages (array of hashes)
     action_log = notion_service.action_log
     Rails.logger.debug "Item processing complete."
@@ -244,7 +282,7 @@ class MainController < ApplicationController
 
     if @skip_confirmation # hardcore mode turned on
       create_note_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to("/")
     else
@@ -264,7 +302,7 @@ class MainController < ApplicationController
 
     if @skip_confirmation
       create_task_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to "/"
     else
@@ -283,7 +321,7 @@ class MainController < ApplicationController
 
     if @skip_confirmation
       create_recommendation_in_notion(notion_service)
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to "/"
     else
@@ -300,7 +338,7 @@ class MainController < ApplicationController
     notion_service.update_ingredients(@ingredients)
 
     if @skip_confirmation
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to "/"
     else
@@ -317,7 +355,7 @@ class MainController < ApplicationController
     notion_service.update_recipes(@recipes)
 
     if @skip_confirmation
-      flash[:notice] = notion_service.action_log
+      flash[:action_log] = notion_service.action_log
       flash[:transcription] = @note
       redirect_to "/"
     else
