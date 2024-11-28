@@ -1,5 +1,3 @@
-<!-- app/views/main_templates/home.html.erb -->
-
 <!DOCTYPE html>
 <html>
   <head>
@@ -9,408 +7,507 @@
     <%= csp_meta_tag %>
 
     <style>
-      /* Optional: Add some custom styles for better UX */
-      #record-button.recording {
-        background-color: #dc3545; /* Bootstrap danger color */
+      /* Custom Styles */
+
+      /* Button States */
+      #action-button {
+        padding: 10px 20px;
+        font-size: 16px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+
+      #action-button.grant {
+        background-color: #007bff; /* Blue */
         color: white;
       }
-      #record-button.processing {
-        background-color: #ffc107; /* Bootstrap warning color */
+
+      #action-button.record {
+        background-color: #dc3545; /* Red */
+        color: white;
+      }
+
+      #action-button.processing {
+        background-color: #ff6f61; /* Light Red */
         color: black;
+        cursor: not-allowed;
       }
-      #processing-indicator {
-        display: none;
-        color: #ffc107;
+
+      /* Status Messages */
+      #status-message {
+        margin-bottom: 1rem;
+        color: black;
         font-weight: bold;
-        margin-bottom: 1rem;
       }
-      /* Additional styles for permission messages */
-      #permission-message, #permission-granted-indicator {
-        margin-bottom: 1rem;
+
+      /* Transcription Section */
+      #transcription-section {
+        display: none;
+        margin-top: 1rem;
+      }
+
+      /* Checkbox Styles */
+      .form-check {
+        margin-top: 1rem;
+      }
+
+      /* Events and Action Log Sections */
+      .log-section {
+        margin-top: 2rem;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        background-color: #f9f9f9;
+      }
+
+      .log-section h3 {
+        margin-top: 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.5rem;
+      }
+
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+      }
+
+      th {
+        background-color: #f2f2f2;
+        text-align: left;
+      }
+
+      /* Optional: Add some spacing */
+      body {
+        padding: 20px;
+        font-family: Arial, sans-serif;
+      }
+
+      /* Responsive Design */
+      @media (max-width: 600px) {
+        #action-button {
+          width: 100%;
+        }
       }
     </style>
   </head>
 
   <body>
-    <div class="container mt-5">
-      <a href="/" class="btn btn-secondary mb-4">Back to Home</a>
-      <hr>
-
+    <div class="container">
       <h1 class="mb-4">Dictation App</h1>
 
-      <!-- Permission Messages -->
-      <div id="permission-message" class="alert alert-warning" style="display: none;">
-        Microphone access is required for recording. Please enable it in your browser settings.
-      </div>
-      <div id="permission-granted-indicator" class="text-success fw-bold mb-3" style="display: none;">
-        Microphone access granted. You can start recording.
-      </div>
-      <div id="permission-denied-indicator" class="alert alert-danger" style="display: none;">
-        Microphone access denied. Please allow access to use the recording feature.
-        <button id="retry-permission" class="btn btn-primary btn-sm mt-2">Retry Permission</button>
-      </div>
+      <!-- Status Message -->
+      <div id="status-message">Please enable microphone access to start recording.</div>
 
-      <!-- Hold to Record Button -->
-      <button id="record-button" class="btn btn-danger mb-3" aria-label="Hold to start recording" aria-pressed="false">
-        Hold to Record
-      </button>
+      <!-- Action Button: Grant Access / Hold to Record -->
+      <button id="action-button" class="grant">Grant Microphone Access</button>
 
       <!-- Hardcore Mode Checkbox -->
-      <div class="form-check mb-3">
-        <input type="checkbox" class="form-check-input" id="skip_confirmation" name="skip_confirmation" value="1" checked>
-        <label class="form-check-label" for="skip_confirmation">Skip confirmation step ("hardcore mode")</label>
+      <div class="form-check">
+        <input
+          type="checkbox"
+          class="form-check-input"
+          id="hardcore-mode"
+          checked
+        />
+        <label class="form-check-label" for="hardcore-mode">
+          Skip confirmation ("hardcore mode")
+        </label>
       </div>
 
-      <!-- Recording Indicator -->
-      <div id="recording-indicator" class="text-danger fw-bold mb-3" style="display: none;">
-        Recording...
+      <!-- Transcription Section -->
+      <div id="transcription-section">
+        <label for="transcription">Transcription:</label>
+        <textarea
+          id="transcription"
+          class="form-control"
+          rows="5"
+          placeholder="Transcription will appear here..."
+        ></textarea>
+        <button id="confirm-button" class="btn btn-secondary mt-2">
+          Confirm
+        </button>
       </div>
 
-      <!-- Action Log Container -->
-      <div id="action-log-container" class="bg-info text-white p-3 rounded mb-4">
-        <h3>Action Log:</h3>
-        
-        <!-- Transcription Section -->
-        <div id="transcription-section" class="mb-3">
-          <% if flash[:transcription].present? %>
-            <p><strong>Transcription:</strong> <%= sanitize(flash[:transcription]) %></p>
-          <% else %>
-            <p id="no-transcription-message">No transcription available.</p>
-          <% end %>
-        </div>
-        
-        <!-- History Section -->
-        <div id="history-section">
-          <% if flash[:notice].present? && flash[:notice].any? %>
-            <h4>History:</h4>
-            <ul>
-              <% flash[:notice].each do |entry| %>
-                <% if entry['url'] %>
-                  <li>
-                    <strong><%= entry['message'] %></strong>:
-                    <a href="<%= entry['url'] %>" target="_blank" class="text-white"><u>View in Notion</u></a>
-                  </li>
-                <% else %>
-                  <li><%= entry['message'] %></li>
-                <% end %>
+      <!-- Events Section -->
+      <div class="log-section" id="events-section">
+        <h3>Events</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Event</th>
+            </tr>
+          </thead>
+          <tbody id="events-table-body">
+            <% if @events.present? %>
+              <% @events.each do |event| %>
+                <tr>
+                  <td><%= event[:timestamp] %></td>
+                  <td><%= event[:message] %></td>
+                </tr>
               <% end %>
-            </ul>
-          <% else %>
-          <% end %>
-        </div>
+            <% else %>
+              <tr>
+                <td colspan="2">No events to display.</td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
       </div>
 
-      <!-- Transcription Form -->
-      <form action="/submit" method="post" class="mb-4">
-        <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
-        <div class="mb-3">
-          <%= label_tag :input_box, "Transcription", class: "form-label" %>
-          <%= text_area_tag :input, @input || "", id: "input_box", rows: 5, placeholder: "Dictation will appear here...", class: "form-control", lang: "en" %>
-        </div>
-        <button type="submit" class="btn btn-primary">Submit</button>
-      </form>
-
-      <!-- Example Prompts -->
-      <h3>Example Prompts</h3>
-      <ol>
-        <li>I need to add cumin to my shopping list</li>
-        <li>I spoke to Lydia Wang from my Digital Marketing class. We both have to finish the LinkedIn social media ads for SearchStax by Friday next week.</li>
-        <li>I spoke to Jivika. She can get me an interview with Notion.</li>
-        <li>I had a brilliant conversation with Professor Lil Mohan. We had a great conversation about the deterioration of incoming MBA students, year over year.</li>
-        <li>Lorna just reminded me that I need to pick her up from the airport on Friday.</li>
-        <li>Need to buy cumin, black pepper, 1 yellow onion, 2 tomatoes, 4 eggplants, and a bottle of whiskey.</li>
-        <li>I was sitting next to Paul Kozhipatt in my Managing the Workplace class. He advised me to finish it before applying to Apple.</li>
-        <li>Dinner plan tonight: Lebanese Pita Bread, Manakish, Lamb Tagine, Roasted Garlic Hummus, and Roasted Parsnips.</li>
-      </ol>
-
-      <!-- Include Bootstrap JS Bundle -->
-      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
-
-      <!-- JavaScript for Recording and Action Log -->
-      <script>
-        document.addEventListener('DOMContentLoaded', () => {
-          console.log('JavaScript Loaded');
-
-          // DOM Elements
-          const recordButton = document.getElementById('record-button');
-          const recordingIndicator = document.getElementById('recording-indicator');
-          const inputBox = document.getElementById('input_box');
-          const hardcoreModeCheckbox = document.getElementById('skip_confirmation');
-          const actionLogContainer = document.getElementById('action-log-container');
-
-          // Permission Indicators
-          const permissionMessage = document.getElementById('permission-message');
-          const permissionGrantedIndicator = document.getElementById('permission-granted-indicator');
-          const permissionDeniedIndicator = document.getElementById('permission-denied-indicator');
-          const retryPermissionButton = document.getElementById('retry-permission');
-
-          // Variables
-          let mediaRecorder = null;
-          let audioChunks = [];
-          let isRecording = false;
-          let microphonePermissionGranted = false;
-
-          // Function to sanitize HTML to prevent XSS
-          const sanitizeHTML = (str) => {
-            const temp = document.createElement('div');
-            temp.textContent = str;
-            return temp.innerHTML;
-          };
-
-          // Function to request microphone access on load
-          const requestMicrophoneAccess = async () => {
-            if (localStorage.getItem('micPermissionRequested')) {
-              // Check permission status
-              const permission = await navigator.permissions.query({ name: 'microphone' });
-              if (permission.state === 'granted') {
-                microphonePermissionGranted = true;
-                permissionGrantedIndicator.style.display = 'block';
-                permissionMessage.style.display = 'none';
-                permissionDeniedIndicator.style.display = 'none';
-                console.log('Microphone permission already granted.');
-              } else if (permission.state === 'denied') {
-                microphonePermissionGranted = false;
-                permissionDeniedIndicator.style.display = 'block';
-                permissionMessage.style.display = 'none';
-                permissionGrantedIndicator.style.display = 'none';
-                console.log('Microphone permission already denied.');
-              }
-              return;
-            }
-
-            try {
-              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              microphonePermissionGranted = true;
-              localStorage.setItem('micPermissionRequested', 'true');
-              permissionGrantedIndicator.style.display = 'block';
-              permissionMessage.style.display = 'none';
-              permissionDeniedIndicator.style.display = 'none';
-              console.log('Microphone permission granted on load.');
-              // Stop the stream immediately as we only needed to get permission
-              stream.getTracks().forEach(track => track.stop());
-            } catch (error) {
-              console.error('Microphone permission denied:', error);
-              microphonePermissionGranted = false;
-              permissionDeniedIndicator.style.display = 'block';
-              permissionMessage.style.display = 'none';
-            }
-          };
-
-          // Call the permission request on load
-          requestMicrophoneAccess();
-
-          // Retry Permission Access
-          if (retryPermissionButton) {
-            retryPermissionButton.addEventListener('click', () => {
-              // Remove the previous denial
-              localStorage.removeItem('micPermissionRequested');
-              permissionDeniedIndicator.style.display = 'none';
-              permissionMessage.style.display = 'block';
-              // Attempt to request permission again
-              requestMicrophoneAccess();
-            });
-          }
-
-          // Function to start recording
-          const startRecording = async () => {
-            if (!microphonePermissionGranted) {
-              alert('Microphone access is not granted. Please allow access to use the recording feature.');
-              return false;
-            }
-
-            try {
-              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              mediaRecorder = new MediaRecorder(stream);
-
-              // Event handler for data availability
-              mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                  audioChunks.push(event.data);
-                }
-              };
-
-              // Event handler for stopping the recorder
-              mediaRecorder.onstop = handleRecordingStop;
-
-              // Start recording
-              mediaRecorder.start();
-              isRecording = true;
-              recordingIndicator.style.display = 'block';
-              recordButton.classList.add('recording');
-              console.log('Recording started');
-              return true;
-            } catch (error) {
-              console.error('Error starting recording:', error);
-              alert('An error occurred while trying to start recording.');
-              return false;
-            }
-          };
-
-          // Function to stop recording
-          const stopRecording = () => {
-            if (!isRecording || !mediaRecorder) return;
-
-            mediaRecorder.stop();
-            isRecording = false;
-            recordingIndicator.style.display = 'none';
-            recordButton.classList.remove('recording');
-            console.log('Recording stopped');
-          };
-
-          // Function to handle the recording stop event
-          const handleRecordingStop = async () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            audioChunks = []; // Reset for next recording
-
-            // Prepare form data
-            const formData = new FormData();
-            formData.append('audio_file', audioBlob, 'recording.webm');
-            formData.append('authenticity_token', '<%= form_authenticity_token %>');
-            formData.append('skip_confirmation', hardcoreModeCheckbox.checked ? '1' : '0');
-
-            try {
-              const response = await fetch('/upload_audio', {
-                method: 'POST',
-                body: formData
-              });
-
-              if (!response.ok) {
-                const errorData = await response.json();
-                throw errorData;
-              }
-
-              const data = await response.json();
-              console.log('Fetch response:', data);
-
-              if (hardcoreModeCheckbox.checked) {
-                if (data.action_log && data.action_log.length > 0) {
-                  displayActionLog(data.transcription, data.action_log);
-                } else {
-                  alert('No action log received.');
-                  if (data.transcription) {
-                    // Even if no action log, display transcription
-                    displayActionLog(data.transcription, []);
-                  }
-                }
-              } else if (data.transcription) {
-                inputBox.value = sanitizeHTML(data.transcription);
-              } else {
-                alert('Unexpected response from the server.');
-              }
-            } catch (error) {
-              console.error('Fetch error:', error);
-              alert(error.error || 'An error occurred during processing.');
-            }
-          };
-
-          // Function to display the Transcription and Action Log
-          const displayActionLog = (transcription, actionLog) => {
-            // Clear existing dynamic content
-            const existingDynamicContent = document.getElementById('dynamic-action-log');
-            if (existingDynamicContent) {
-              existingDynamicContent.remove();
-            }
-
-            // Create a new Action Log section
-            const actionLogDiv = document.createElement('div');
-            actionLogDiv.id = 'dynamic-action-log';
-            actionLogDiv.className = 'bg-info text-white p-3 rounded mb-4';
-
-            // Transcription Section
-            if (transcription) {
-              const transcriptionHeader = document.createElement('h4');
-              transcriptionHeader.textContent = 'Transcription:';
-              actionLogDiv.appendChild(transcriptionHeader);
-
-              const transcriptionPara = document.createElement('p');
-              transcriptionPara.textContent = transcription;
-              actionLogDiv.appendChild(transcriptionPara);
-            }
-
-            // History Section
-            if (actionLog && actionLog.length > 0) {
-              const historyHeader = document.createElement('h4');
-              historyHeader.textContent = 'History:';
-              actionLogDiv.appendChild(historyHeader);
-
-              const ulHistory = document.createElement('ul');
-
-              actionLog.forEach(entry => {
-                const li = document.createElement('li');
-                if (entry.url) {
-                  li.innerHTML = `<strong>${sanitizeHTML(entry.message)}</strong>: <a href="${sanitizeHTML(entry.url)}" target="_blank" class="text-white"><u>View in Notion</u></a>`;
-                } else {
-                  li.textContent = sanitizeHTML(entry.message);
-                }
-                ulHistory.appendChild(li);
-              });
-
-              actionLogDiv.appendChild(ulHistory);
-            }
-
-            // Append the new Action Log to the container
-            actionLogContainer.appendChild(actionLogDiv);
-            console.log('Action log displayed');
-
-            // Hide "No recent activity" and "No transcription available" messages
-            if (transcription) {
-              const noTranscriptionMessage = document.getElementById('no-transcription-message');
-              if (noTranscriptionMessage) noTranscriptionMessage.style.display = 'none';
-            }
-
-            if (actionLog && actionLog.length > 0) {
-              const noActivityMessage = document.getElementById('no-activity-message');
-              if (noActivityMessage) noActivityMessage.style.display = 'none';
-            }
-          };
-
-          // Event listeners for pointer events and keyboard events
-          const handleStartEvent = async (event) => {
-            event.preventDefault();
-            const success = await startRecording();
-            if (!success) {
-              // If recording failed to start, reset UI elements
-              recordingIndicator.style.display = 'none';
-              recordButton.classList.remove('recording');
-              recordButton.disabled = false;
-            }
-          };
-
-          const handleStopEvent = (event) => {
-            event.preventDefault();
-            stopRecording();
-          };
-
-          // Pointer Events
-          recordButton.addEventListener('pointerdown', handleStartEvent);
-          recordButton.addEventListener('pointerup', handleStopEvent);
-          recordButton.addEventListener('pointerleave', (event) => {
-            if (isRecording) {
-              handleStopEvent(event);
-            }
-          });
-
-          // Prevent default behavior for pointer events to avoid accidental clicks
-          recordButton.addEventListener('pointercancel', handleStopEvent);
-
-          // Accessibility: Handle keyboard events (Space and Enter)
-          recordButton.addEventListener('keydown', (event) => {
-            if ((event.key === ' ' || event.key === 'Enter') && !isRecording) {
-              handleStartEvent(event);
-            }
-          });
-
-          recordButton.addEventListener('keyup', (event) => {
-            if ((event.key === ' ' || event.key === 'Enter') && isRecording) {
-              handleStopEvent(event);
-            }
-          });
-
-          // Touch Events for iOS Compatibility
-          recordButton.addEventListener('touchstart', handleStartEvent);
-          recordButton.addEventListener('touchend', handleStopEvent);
-        });
-      </script>
+      <!-- Action Log Section -->
+      <div class="log-section" id="action-log-section">
+        <h3>Action Log</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="action-log-table-body">
+            <% if @action_log.present? %>
+              <% @action_log.each do |action| %>
+                <tr>
+                  <td><%= action[:timestamp] %></td>
+                  <td><%= action[:message] %></td>
+                </tr>
+              <% end %>
+            <% else %>
+              <tr>
+                <td colspan="2">No actions to display.</td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
     </div>
+
+    <!-- Include Bootstrap JS and dependencies (optional) -->
+    <script 
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" 
+      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" 
+      crossorigin="anonymous"></script>
+    <script
+      src="https://code.jquery.com/jquery-3.7.1.slim.min.js"
+      integrity="sha256-kmHvs0B+OpCW5GVHUNjv9rOmY0IvSIRcf7zGUDTDQM8="
+      crossorigin="anonymous"></script>
+
+    <script>
+      // JavaScript Functionality
+
+      // Select Elements
+      const actionButton = document.getElementById('action-button');
+      const statusMessage = document.getElementById('status-message');
+      const hardcoreModeCheckbox = document.getElementById('hardcore-mode');
+      const transcriptionSection = document.getElementById('transcription-section');
+      const transcriptionTextBox = document.getElementById('transcription');
+      const confirmButton = document.getElementById('confirm-button');
+      const eventsTableBody = document.getElementById('events-table-body');
+      const actionLogTableBody = document.getElementById('action-log-table-body');
+
+      // MediaRecorder and Stream Variables
+      let mediaRecorder;
+      let audioChunks = [];
+
+      // Flag to Check Microphone Access
+      let hasMicrophoneAccess = false;
+
+      // Function to check microphone permission status
+      async function checkMicrophonePermission() {
+        try {
+          const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+          return permissionStatus.state; // 'granted', 'denied', or 'prompt'
+        } catch (error) {
+          console.error('Permissions API error:', error);
+          // Fallback to getUserMedia if Permissions API is not supported
+          return 'prompt';
+        }
+      }
+
+      // Function to Initialize MediaRecorder
+      async function initializeRecorder() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          hasMicrophoneAccess = true;
+          statusMessage.textContent = 'Microphone access granted. Click and hold the button to start recording.';
+          // Change button to "Hold to Record"
+          actionButton.textContent = 'Hold to Record';
+          actionButton.classList.remove('grant');
+          actionButton.classList.add('record');
+
+          // Initialize MediaRecorder
+          mediaRecorder = new MediaRecorder(stream);
+
+          // Event Handlers for MediaRecorder
+          mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+          };
+
+          mediaRecorder.onstop = handleRecordingStop;
+
+          // Add Event Listeners for Recording
+          actionButton.addEventListener('mousedown', startRecording);
+          actionButton.addEventListener('touchstart', startRecording);
+          actionButton.addEventListener('mouseup', stopRecording);
+          actionButton.addEventListener('touchend', stopRecording);
+          actionButton.addEventListener('mouseleave', stopRecording);
+
+          addEvent('Microphone initialized and ready.');
+        } catch (error) {
+          console.error('Error accessing microphone:', error);
+          statusMessage.textContent = 'Microphone access denied. Please enable it to use the app.';
+          actionButton.disabled = true;
+          addEvent('Microphone access denied.');
+        }
+      }
+
+      // Function to check and initialize microphone on page load
+      async function initializeApp() {
+        const permissionState = await checkMicrophonePermission();
+
+        if (permissionState === 'granted') {
+          // If permission is already granted, initialize the recorder
+          initializeRecorder();
+        } else if (permissionState === 'prompt') {
+          // If permission needs to be requested, ensure the Grant button is available
+          actionButton.textContent = 'Grant Microphone Access';
+          actionButton.classList.remove('record', 'processing');
+          actionButton.classList.add('grant');
+        } else {
+          // If permission is denied, disable the action button and notify the user
+          statusMessage.textContent = 'Microphone access denied. Please enable it in your browser settings to use the app.';
+          actionButton.disabled = true;
+          addEvent('Microphone access denied.');
+        }
+      }
+
+      // Listen for changes in microphone permission
+      async function listenForPermissionChanges() {
+        try {
+          const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+          permissionStatus.onchange = () => {
+            if (permissionStatus.state === 'granted') {
+              initializeRecorder();
+            } else if (permissionStatus.state === 'denied') {
+              statusMessage.textContent = 'Microphone access denied. Please enable it in your browser settings to use the app.';
+              actionButton.disabled = true;
+              addEvent('Microphone access denied.');
+            }
+          };
+        } catch (error) {
+          console.error('Permissions API error:', error);
+          // Permissions API might not be supported; no action needed
+        }
+      }
+
+      // Function to Initialize App on Page Load
+      window.addEventListener('load', () => {
+        initializeApp();
+        appendServerEvents();
+        appendServerActionLogs();
+        listenForPermissionChanges();
+      });
+
+      // Grant Microphone Access Handler
+      actionButton.addEventListener('click', () => {
+        if (!hasMicrophoneAccess) {
+          initializeRecorder();
+        }
+      });
+
+      // Start Recording
+      function startRecording(event) {
+        event.preventDefault(); // Prevent default behavior for touch events
+        if (mediaRecorder && mediaRecorder.state === 'inactive') {
+          audioChunks = [];
+          mediaRecorder.start();
+          statusMessage.textContent = 'Recording... Release the button to stop.';
+          actionButton.classList.add('processing');
+          addEvent('Recording started.');
+        }
+      }
+
+      // Stop Recording
+      function stopRecording(event) {
+        event.preventDefault(); // Prevent default behavior for touch events
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+          statusMessage.textContent = 'Processing...';
+          actionButton.classList.remove('processing');
+          addEvent('Recording stopped.');
+        }
+      }
+
+      // Handle Recording Stop
+      async function handleRecordingStop() {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('hardcore_mode', hardcoreModeCheckbox.checked ? '1' : '0');
+
+        try {
+          const response = await fetch('/upload_audio', { // Ensure this matches your routes
+            method: 'POST',
+            headers: {
+              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: formData
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (hardcoreModeCheckbox.checked) {
+              // Hardcore Mode: Immediately process
+              statusMessage.textContent = 'Audio transcribed and processed successfully.';
+              addActionLog('Audio transcribed and processed in hardcore mode.');
+              // Optionally, update Action Log with server-side logs
+              appendServerActionLogs();
+            } else {
+              // Non-Hardcore Mode: Display transcription for confirmation
+              transcriptionTextBox.value = data.transcription;
+              transcriptionSection.style.display = 'block';
+              statusMessage.textContent = 'Transcription available. Please confirm.';
+              addEvent('Audio transcribed and ready for confirmation.');
+            }
+          } else {
+            console.error('Server Error:', response.statusText);
+            statusMessage.textContent = 'Error processing audio. Please try again.';
+            addEvent(`Error processing audio: ${response.statusText}`);
+          }
+        } catch (error) {
+          console.error('Fetch Error:', error);
+          statusMessage.textContent = 'Error processing audio. Please try again.';
+          addEvent(`Error processing audio: ${error.message}`);
+        }
+      }
+
+      // Confirm Button Handler
+      confirmButton.addEventListener('click', async () => {
+        const transcription = transcriptionTextBox.value.trim();
+        if (!transcription) {
+          alert('Transcription is empty. Please try recording again.');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('transcription', transcription);
+        formData.append('hardcore_mode', hardcoreModeCheckbox.checked ? '1' : '0');
+
+        try {
+          const response = await fetch('/confirm_transcription', { // Ensure this matches your routes
+            method: 'POST',
+            headers: {
+              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: formData
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            statusMessage.textContent = 'Transcription confirmed and processed successfully.';
+            transcriptionSection.style.display = 'none';
+            transcriptionTextBox.value = '';
+            addActionLog('Transcription confirmed and processed.');
+            // Optionally, update Action Log with server-side logs
+            appendServerActionLogs();
+          } else {
+            console.error('Server Error:', response.statusText);
+            statusMessage.textContent = 'Error confirming transcription. Please try again.';
+            addEvent(`Error confirming transcription: ${response.statusText}`);
+          }
+        } catch (error) {
+          console.error('Fetch Error:', error);
+          statusMessage.textContent = 'Error confirming transcription. Please try again.';
+          addEvent(`Error confirming transcription: ${error.message}`);
+        }
+      });
+
+      // Function to Add Entries to Events
+      function addEvent(message) {
+        const tr = document.createElement('tr');
+        const timestampTd = document.createElement('td');
+        const messageTd = document.createElement('td');
+
+        const timestamp = new Date().toLocaleTimeString();
+        timestampTd.textContent = timestamp;
+        messageTd.textContent = message;
+
+        tr.appendChild(timestampTd);
+        tr.appendChild(messageTd);
+        eventsTableBody.prepend(tr); // Add to the top
+      }
+
+      // Function to Add Entries to Action Log
+      function addActionLog(message) {
+        const tr = document.createElement('tr');
+        const timestampTd = document.createElement('td');
+        const messageTd = document.createElement('td');
+
+        const timestamp = new Date().toLocaleTimeString();
+        timestampTd.textContent = timestamp;
+        messageTd.textContent = message;
+
+        tr.appendChild(timestampTd);
+        tr.appendChild(messageTd);
+        actionLogTableBody.prepend(tr); // Add to the top
+      }
+
+      // Function to Append Server-Side Action Logs
+      async function appendServerActionLogs() {
+        try {
+          const response = await fetch('/fetch_action_logs', { // Ensure this route exists
+            method: 'GET',
+            headers: {
+              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.action_logs && data.action_logs.length > 0) {
+              data.action_logs.forEach(action => {
+                addActionLog(action);
+              });
+            }
+          } else {
+            console.error('Failed to fetch server-side action logs.');
+          }
+        } catch (error) {
+          console.error('Error fetching server-side action logs:', error);
+        }
+      }
+
+      // Function to Append Server-Side Events
+      async function appendServerEvents() {
+        try {
+          const response = await fetch('/fetch_events', { // Ensure this route exists
+            method: 'GET',
+            headers: {
+              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.events && data.events.length > 0) {
+              data.events.forEach(event => {
+                addEvent(event);
+              });
+            }
+          } else {
+            console.error('Failed to fetch server-side events.');
+          }
+        } catch (error) {
+          console.error('Error fetching server-side events:', error);
+        }
+      }
+    </script>
+
   </body>
 </html>
