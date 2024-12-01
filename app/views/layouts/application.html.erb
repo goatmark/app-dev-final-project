@@ -16,6 +16,105 @@
 
     <!-- Apple Touch Icon -->
     <link rel="apple-touch-icon" href="<%= asset_path('icons/speaker-180x.png') %>">
+
+    <style>
+      /* Custom Styles */
+
+      /* Button States */
+      #action-button {
+        padding: 10px 20px;
+        font-size: 16px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+
+      #action-button.grant {
+        background-color: #007bff; /* Blue */
+        color: white;
+      }
+
+      #action-button.record {
+        background-color: #dc3545; /* Red */
+        color: white;
+      }
+
+      #action-button.processing {
+        background-color: #ff6f61; /* Light Red */
+        color: black;
+        cursor: not-allowed;
+      }
+
+      /* Status Messages */
+      #status-message {
+        margin-bottom: 1rem;
+        color: black;
+        font-weight: bold;
+      }
+
+      /* Transcription Section */
+      #transcription-section {
+        display: none;
+        margin-top: 1rem;
+      }
+
+      /* Checkbox Styles */
+      .form-check {
+        margin-top: 1rem;
+      }
+
+      /* Events and Action Log Sections */
+      .log-section {
+        margin-top: 2rem;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        background-color: #f9f9f9;
+      }
+
+      .log-section h3 {
+        margin-top: 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.5rem;
+      }
+
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+      }
+
+      th {
+        background-color: #f2f2f2;
+        text-align: left;
+      }
+
+      /* Optional: Add some spacing */
+      body {
+        padding: 20px;
+        font-family: Arial, sans-serif;
+      }
+
+      /* Responsive Design */
+      @media (max-width: 600px) {
+        #action-button {
+          width: 100%;
+        }
+      }
+
+      /* Styles for Grant Button */
+      #grant-mic-button {
+        display: none; /* Initially hidden */
+        margin-bottom: 1rem;
+      }
+    </style>
+
+    <br>
+    <div class="container"><a href = "/" class="btn btn-secondary mb-4">Home</a></div>
+    <hr>
     
   </head>
 
