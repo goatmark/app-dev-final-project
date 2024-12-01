@@ -1,98 +1,16 @@
-# app / controllers / main_controller.rb
+# app/controllers/main_controller.rb
 
 require 'streamio-ffmpeg'
 
 class MainController < ApplicationController
   protect_from_forgery except: [:upload_audio, :confirm_transcription, :fetch_events, :fetch_action_logs]
 
-  # Initialize separate logs
   def main
     @action_log = flash[:action_log] || []
     @events = flash[:events] || []
     @transcription = flash[:transcription] || ""
     @skip_confirmation = flash[:skip_confirmation] == '1'
     render(template: "main_templates/home")
-  end
-
-  def submit
-    @note = params.fetch("input", "")
-    skip_confirmation = (params.fetch("skip_confirmation", false) || flash[:skip_confirmation])
-    redirect_to("/processing", flash: { note: @note, skip_confirmation: skip_confirmation })
-  end
-
-  def processing
-    @note = flash[:note]
-    @skip_confirmation = flash[:skip_confirmation]
-    @todays_date = Date.today.strftime("%Y-%m-%d")
-
-    openai_service = OpenaiService.new
-    notion_service = NotionService.new
-    @result = openai_service.classify_message(message: @note)
-
-    case @result
-    when "note"
-      process_note(notion_service)
-    when "task"
-      process_task(notion_service)
-    when "ingredient"
-      process_ingredients(notion_service)
-    when "recipe"
-      process_recipes(notion_service)
-    when "recommendation"
-      process_recommendation(notion_service)
-    when "idea"
-      # TBD
-    else
-      redirect_to "/", alert: "Could not classify the transcription."
-    end
-  end
-
-  def confirm
-    @result = params[:result]
-    notion_service = NotionService.new
-
-    case @result
-    when "note"
-      @title = params[:title]
-      @body = params[:body]
-      @date = params[:todays_date]
-      @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
-      create_note_in_notion(notion_service)
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to "/"
-    when "task"
-      @task = params[:task]
-      @deadline = params[:deadline]
-      @action_date = params[:action_date]
-      @related_entities = params[:related_entities].present? ? JSON.parse(params[:related_entities]) : []
-      create_task_in_notion(notion_service)
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to "/"
-    when "recommendation"
-      @recommendation = params[:recommendation]
-      @recommendation_type = params[:recommendation_type]
-      create_recommendation_in_notion(notion_service)
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to "/"
-    when "ingredient"
-      @ingredients = params[:ingredients].present? ? JSON.parse(params[:ingredients]) : []
-      notion_service.update_ingredients(@ingredients)
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to "/"
-    when "recipe"
-      @recipes = params[:recipes].present? ? JSON.parse(params[:recipes]) : []
-      notion_service.update_recipes(@recipes)
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to "/"
-    else
-      flash[:alert] = "Unknown result type."
-      redirect_to "/"
-    end
   end
 
   def upload_audio
@@ -108,7 +26,6 @@ class MainController < ApplicationController
         File.open(temp_audio_path, 'wb') { |file| file.write(audio_file.read) }
         Rails.logger.debug "Audio file saved successfully. Size: #{File.size(temp_audio_path)} bytes."
 
-        # Check file size (e.g., minimum 1KB)
         if File.size(temp_audio_path) < 1000
           Rails.logger.error "Audio file too small: #{File.size(temp_audio_path)} bytes."
           File.delete(temp_audio_path)
@@ -116,14 +33,13 @@ class MainController < ApplicationController
           return
         end
 
-        # Convert WebM to WAV using FFmpeg
         converted_audio_path = Rails.root.join('tmp', 'uploads', "converted_#{SecureRandom.uuid}.wav")
         movie = FFMPEG::Movie.new(temp_audio_path.to_s)
-        transcoding_options = { 
-          audio_codec: "pcm_s16le", 
-          channels: 1, 
-          custom: %w(-ar 16000) 
-        } # Removed audio_bitrate
+        transcoding_options = {
+          audio_codec: "pcm_s16le",
+          channels: 1,
+          custom: %w(-ar 16000)
+        }
 
         movie.transcode(converted_audio_path.to_s, transcoding_options) do |progress|
           if progress.finite?
@@ -154,7 +70,6 @@ class MainController < ApplicationController
           end
         else
           Rails.logger.debug "Returning transcription for manual confirmation."
-          # Log the event
           flash[:events] ||= []
           flash[:events] << { timestamp: Time.now.strftime("%H:%M:%S"), message: 'Transcription received for confirmation.' }
           render json: { transcription: transcription }, status: :ok
@@ -168,7 +83,6 @@ class MainController < ApplicationController
         Rails.logger.error e.backtrace.join("\n")
         render json: { error: 'An error occurred while processing the audio.' }, status: :internal_server_error
       ensure
-        # Clean up temporary files
         [temp_audio_path, converted_audio_path].each do |path|
           if path && File.exist?(path)
             File.delete(path)
@@ -181,16 +95,6 @@ class MainController < ApplicationController
     end
   end
 
-  def fetch_events
-    @events = flash[:events] || []
-    render json: { events: @events.map { |event| event[:message] } }, status: :ok
-  end
-
-  def fetch_action_logs
-    @action_log = flash[:action_log] || []
-    render json: { action_logs: @action_log.map { |action| action[:message] } }, status: :ok
-  end
-
   def confirm_transcription
     transcription = params[:transcription]
     hardcore_mode = params[:hardcore_mode] == '1'
@@ -198,7 +102,6 @@ class MainController < ApplicationController
     Rails.logger.debug "Received confirm_transcription request. Transcription: #{transcription}, Hardcore Mode: #{hardcore_mode}"
 
     if hardcore_mode
-      # Directly process without confirmation
       result = process_transcription(transcription)
       if result[:success]
         flash[:action_log] = result[:action_log]
@@ -208,11 +111,20 @@ class MainController < ApplicationController
         render json: { success: false, error: result[:error] }, status: :unprocessable_entity
       end
     else
-      # Handle non-hardcore mode: Process transcription after user confirmation
-      flash[:action_log] = ['Transcription confirmed by user.'] # Example log
+      flash[:action_log] = ['Transcription confirmed by user.']
       flash[:transcription] = transcription
       render json: { success: true, message: 'Transcription confirmed.' }, status: :ok
     end
+  end
+
+  def fetch_events
+    @events = flash[:events] || []
+    render json: { events: @events.map { |event| event[:message] } }, status: :ok
+  end
+
+  def fetch_action_logs
+    @action_log = flash[:action_log] || []
+    render json: { action_logs: @action_log.map { |action| action[:message] } }, status: :ok
   end
 
   private
@@ -229,36 +141,20 @@ class MainController < ApplicationController
     Rails.logger.debug "Parsing result: #{@result}"
     case @result
     when "note"
-      @body = openai_service.extract_note_body(message: @note)
-      @title = openai_service.extract_note_title(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note) || []
-      Rails.logger.debug "Note metadata extracted."
-      create_note_in_notion(notion_service)
+      process_note_transcription(notion_service)
     when "task"
-      @task = openai_service.extract_task_summary(message: @note)
-      @deadline = openai_service.extract_deadline(message: @note)
-      @action_date = openai_service.extract_action_date(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note) || []
-      create_task_in_notion(notion_service)
+      process_task_transcription(notion_service)
     when "recommendation"
-      @recommendation = openai_service.extract_recommendation_summary(message: @note)
-      @recommendation_type = openai_service.extract_recommendation_type(message: @note)
-      @related_entities = openai_service.extract_related_entities(message: @note) || []
-      create_recommendation_in_notion(notion_service)
+      process_recommendation_transcription(notion_service)
     when "ingredient"
-      @ingredients = openai_service.extract_ingredients(message: @note) || []
-      @related_entities = openai_service.extract_related_entities(message: @note) || []
-      notion_service.update_ingredients(@ingredients)
+      process_ingredient_transcription(notion_service)
     when "recipe"
-      @recipes = openai_service.extract_recipes(message: @note) || []
-      @related_entities = openai_service.extract_related_entities(message: @note) || []
-      notion_service.update_recipes(@recipes)
+      process_recipe_transcription(notion_service)
     else
       Rails.logger.error "Could not classify the transcription."
       return { success: false, error: 'Could not classify the transcription.' }
     end
 
-    # Consolidate Action Log messages (array of hashes)
     action_log = notion_service.action_log
     Rails.logger.debug "Item processing complete."
     return { success: true, action_log: action_log }
@@ -267,30 +163,46 @@ class MainController < ApplicationController
     return { success: false, error: 'An error occurred during processing.' }
   end
 
-  def process_note(notion_service)
+  def process_note_transcription(notion_service)
     openai_service = OpenaiService.new
-
-    Rails.logger.debug "Note. Body: #{@body}. Title: #{@title}."
 
     @body = openai_service.extract_note_body(message: @note)
     @title = openai_service.extract_note_title(message: @note)
     @related_entities = openai_service.extract_related_entities(message: @note) || []
-    Rails.logger.debug "Note. Body: #{@body}. Title: #{@title}."
-    Rails.logger.debug "Hardcore Mode? #{@skip_confirmation}"
-    Rails.logger.debug "Starting entity processing."
-    process_entities(notion_service, nil, 'note')
 
-    if @skip_confirmation # hardcore mode turned on
-      create_note_in_notion(notion_service)
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to("/")
-    else
-      render template: "main_templates/processing"
-    end
+    input_values = {
+      title: @title,
+      date: Date.today.strftime('%Y-%m-%d')
+    }
+
+    relations_hash = process_entities(notion_service, 'notes')
+
+    children = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'text',
+              text: {
+                'content' => @body
+              }
+            }
+          ]
+        }
+      }
+    ]
+
+    notion_service.create_page(
+      database_key: :notes,
+      input_values: input_values,
+      relations: relations_hash,
+      children: children
+    )
   end
 
-  def process_task(notion_service)
+  def process_task_transcription(notion_service)
     openai_service = OpenaiService.new
 
     @task = openai_service.extract_task_summary(message: @note)
@@ -298,134 +210,97 @@ class MainController < ApplicationController
     @action_date = openai_service.extract_action_date(message: @note)
     @related_entities = openai_service.extract_related_entities(message: @note) || []
 
-    process_entities(notion_service, nil, 'task')
+    input_values = {
+      title: @task,
+      deadline: @deadline,
+      action_date: @action_date,
+      status: 'Next'
+    }
 
-    if @skip_confirmation
-      create_task_in_notion(notion_service)
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to "/"
-    else
-      render template: "main_templates/processing"
-    end
+    relations_hash = process_entities(notion_service, 'tasks')
+
+    notion_service.create_page(
+      database_key: :tasks,
+      input_values: input_values,
+      relations: relations_hash
+    )
   end
 
-  def process_recommendation(notion_service)
+  def process_recommendation_transcription(notion_service)
     openai_service = OpenaiService.new
 
     @recommendation = openai_service.extract_recommendation_summary(message: @note)
     @recommendation_type = openai_service.extract_recommendation_type(message: @note)
     @related_entities = openai_service.extract_related_entities(message: @note) || []
 
-    process_entities(notion_service, nil, 'recommendation')
+    input_values = {
+      title: @recommendation
+    }
 
-    if @skip_confirmation
-      create_recommendation_in_notion(notion_service)
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to "/"
-    else
-      render template: "main_templates/processing"
-    end
+    relations_hash = process_entities(notion_service, 'recommendations')
+
+    notion_service.create_page(
+      database_key: :recommendations,
+      input_values: input_values,
+      relations: relations_hash
+    )
   end
 
-  def process_ingredients(notion_service)
+  def process_ingredient_transcription(notion_service)
     openai_service = OpenaiService.new
 
     @ingredients = openai_service.extract_ingredients(message: @note) || []
 
-    # Process ingredients to update quantities and get matching info
-    notion_service.update_ingredients(@ingredients)
-
-    if @skip_confirmation
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to "/"
-    else
-      render template: "main_templates/processing"
+    update_values = lambda do |page, item|
+      current_amount = notion_service.get_property_value(page: page, property_name: SCHEMA[:ingredients][:properties][:amount_needed][:name]) || 0
+      new_amount = current_amount + item['quantity'].to_i
+      { amount_needed: new_amount }
     end
+
+    notion_service.update_items(:ingredients, @ingredients, update_values)
   end
 
-  def process_recipes(notion_service)
+  def process_recipe_transcription(notion_service)
     openai_service = OpenaiService.new
 
     @recipes = openai_service.extract_recipes(message: @note) || []
 
-    # Process recipes to mark as planned and get matching info
-    notion_service.update_recipes(@recipes)
-
-    if @skip_confirmation
-      flash[:action_log] = notion_service.action_log
-      flash[:transcription] = @note
-      redirect_to "/"
-    else
-      render template: "main_templates/processing"
+    update_values = lambda do |_page, _item|
+      { planned: true }
     end
+
+    notion_service.update_items(:recipes, @recipes, update_values)
   end
 
-  def create_note_in_notion(notion_service)
-    new_note = notion_service.add_note(title: @title, body: @body, date: Date.today.strftime('%Y-%m-%d'), relations: @related_entities)
-    process_entities(notion_service, new_note['id'], 'note')
-  end
-
-  def create_task_in_notion(notion_service)
-    new_task = notion_service.add_task(task_name: @task, deadline: @deadline, action_date: @action_date, relations: @related_entities)
-    process_entities(notion_service, new_task['id'], 'task')
-  end
-
-  def create_recommendation_in_notion(notion_service)
-    new_recommendation = notion_service.add_recommendation(name: @recommendation, type: @recommendation_type, relations: @related_entities)
-    process_entities(notion_service, new_recommendation['id'], 'recommendation')
-  end
-
-  def process_entities(notion_service, page_id, item_type)
+  def process_entities(notion_service, database_key)
     relations_hash = {}
     @related_entities.each do |entity|
-      relation_field = get_relation_field_for_entity_type(entity['type'], item_type)
+      relation_field = get_relation_field_for_entity_type(entity['type'], database_key)
       next unless relation_field
 
-      page_id_entity, match_type = notion_service.find_or_create_entity(name: entity['name'], relation_field: relation_field)
-      relations_hash[relation_field] ||= []
-      relations_hash[relation_field] << page_id_entity if page_id_entity
+      relation_schema = SCHEMA[database_key.to_sym][:relations][relation_field.to_sym]
+      entity_database_key = relation_schema[:database]
 
-      entity['page_id'] = page_id_entity
+      page_id, match_type = notion_service.find_or_create_entity(
+        name: entity['name'],
+        database_key: entity_database_key
+      )
+
+      relations_hash[relation_field.to_sym] ||= []
+      relations_hash[relation_field.to_sym] << page_id if page_id
+
+      entity['page_id'] = page_id
       entity['match_type'] = match_type
     end
-
-    if page_id && relations_hash.any?
-      notion_service.add_relations_to_page(page_id: page_id, relations_hash: relations_hash, item_type: item_type)
-    end
-
-    return(relations_hash)
+    relations_hash
   end
 
-  def get_relation_field_for_entity_type(entity_type, item_type)
-    if item_type == 'note'
-      {
-        'person' => :people,
-        'company' => :companies,
-        'class' => :classes
-      }[entity_type]
-    elsif item_type == 'task'
-      {
-        'person' => :people,
-        'company' => :companies,
-        'class' => :classes
-      }[entity_type]
-    elsif item_type == 'ingredient'
-      {
-        'company' => :companies
-      }[entity_type]
-    elsif item_type == 'recipe'
-      {
-        'company' => :companies
-      }[entity_type]
-    elsif item_type == 'recommendation'
-      {
-        'person' => :people
-      }[entity_type]
-    else
-      nil
+  def get_relation_field_for_entity_type(entity_type, database_key)
+    SCHEMA[database_key.to_sym][:relations].each do |relation_key, relation_schema|
+      if relation_schema[:database] == entity_type.pluralize.to_sym
+        return relation_key.to_s
+      end
     end
+    nil
   end
 end

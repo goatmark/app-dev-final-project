@@ -19,8 +19,10 @@ class NotionService
   # Schema Definitions
   SCHEMA = {
     notes: {
-      title: { name: 'Meeting', type: 'title' },
-      date: { name: 'Date', type: 'date' },
+      properties: {
+        title: { name: 'Meeting', type: 'title' },
+        date: { name: 'Date', type: 'date' }
+      },
       relations: {
         people: { name: 'People', type: 'relation', database: :people },
         companies: { name: 'Company', type: 'relation', database: :companies },
@@ -28,10 +30,12 @@ class NotionService
       }
     },
     tasks: {
-      title: { name: 'Name', type: 'title' },
-      deadline: { name: 'Deadline', type: 'date' },
-      action_date: { name: 'Action Date', type: 'date' },
-      status: { name: 'Status', type: 'status' },
+      properties: {
+        title: { name: 'Name', type: 'title' },
+        deadline: { name: 'Deadline', type: 'date' },
+        action_date: { name: 'Action Date', type: 'date' },
+        status: { name: 'Status', type: 'status' }
+      },
       relations: {
         people: { name: 'People', type: 'relation', database: :people },
         companies: { name: 'Company', type: 'relation', database: :companies },
@@ -39,37 +43,51 @@ class NotionService
       }
     },
     ingredients: {
-      title: { name: 'Ingredient', type: 'title' },
-      amount_needed: { name: 'Amount Needed', type: 'number' },
+      properties: {
+        title: { name: 'Ingredient', type: 'title' },
+        amount_needed: { name: 'Amount Needed', type: 'number' }
+      },
       relations: {
         company: { name: 'Company', type: 'relation', database: :companies }
       }
     },
     recipes: {
-      title: { name: 'Name', type: 'title' },
-      planned: { name: 'Planned', type: 'checkbox' },
+      properties: {
+        title: { name: 'Name', type: 'title' },
+        planned: { name: 'Planned', type: 'checkbox' }
+      },
       relations: {
         company: { name: 'Company', type: 'relation', database: :companies }
       }
     },
     recommendations: {
-      title: { name: 'Name', type: 'title'},
-      #status: { name: 'Status', type: 'status' },
+      properties: {
+        title: { name: 'Name', type: 'title' }
+        #status: { name: 'Status', type: 'status' } # Uncomment if needed
+      },
       relations: {
-        people: {name: 'People', type: 'relation', database: :people}
+        people: { name: 'People', type: 'relation', database: :people }
       }
     },
     ideas: {
-      title: {name: 'Name', type: 'title' }
+      properties: {
+        title: { name: 'Name', type: 'title' }
+      }
     },
     people: {
-      title: { name: 'Name', type: 'title' }
+      properties: {
+        title: { name: 'Name', type: 'title' }
+      }
     },
     classes: {
-      title: { name: 'Course Title', type: 'title' }
+      properties: {
+        title: { name: 'Course Title', type: 'title' }
+      }
     },
     companies: {
-      title: { name: 'Name', type: 'title' }
+      properties: {
+        title: { name: 'Name', type: 'title' }
+      }
     }
   }.freeze
 
@@ -81,95 +99,67 @@ class NotionService
     @action_log = []
   end
 
-  # Method to construct Notion page URL
-  def construct_notion_url(page_id)
-    # Remove dashes from page_id
-    formatted_id = page_id.gsub(/-/, '')
-    "#{NOTION_BASE_URL}#{formatted_id}"
-  end
-
-  def get_page_title(page_id)
-    Rails.logger.debug "Retrieving title for Page ID: #{page_id}"
-  
-    begin
-      # Fetch page details
-      page = @client.page(page_id: page_id)
-  
-      # Retrieve the title property based on your schema
-      title_property_name = SCHEMA[:notes][:title][:name] # Adjust this based on the database type
-      title_property = page.dig("properties", title_property_name, "title")
-  
-      # Extract the plain text from the title array
-      if title_property.is_a?(Array) && title_property.any?
-        title_property.map { |text_block| text_block["plain_text"] }.join(" ")
-      else
-        "Untitled Page"
-      end
-    rescue Notion::Api::Errors::NotionError => e
-      Rails.logger.error "Error retrieving title for Page ID #{page_id}: #{e.message}"
-      "Error fetching title"
-    end
-  end
-
-  def find_page_by_title(database_key, title)
-    Rails.logger.debug "Finding page in database_key: #{database_key}, title: #{title}"
+  # General method to create a page
+  def create_page(database_key:, input_values:, relations: {}, children: nil)
     database_id = DATABASES[database_key]
-    unless database_id
-      Rails.logger.error "Database ID for #{database_key} not found."
-      return nil
-    end
-  
-    title_property = SCHEMA[database_key][:title][:name]
-    filter = {
-      property: title_property,
-      title: {
-        equals: title
-      }
-    }
-  
-    response = @client.database_query(
-      database_id: database_id,
-      filter: filter
+    properties = construct_properties(database_key: database_key, input_values: input_values, relations: relations)
+
+    response = @client.create_page(
+      parent: { database_id: database_id },
+      properties: properties,
+      children: children
     )
-  
-    if response && response['results'] && !response['results'].empty?
-      page = response['results'].first
-      return page
-    else
-      Rails.logger.warn "No page found for title '#{title}' in database '#{database_key}'."
-      return nil
-    end
+
+    page_id = response['id']
+    page_url = construct_notion_url(page_id)
+    page_title = get_page_title(page_id)
+
+    @action_log << { message: "Created #{database_key.to_s.capitalize}: '#{page_title}'", url: page_url }
+    response
   rescue Notion::Api::Errors::NotionError => e
-    @action_log << "Error querying database #{database_key}: #{e.message}"
+    @action_log << "Error creating page in database #{database_key}: #{e.message}"
     Rails.logger.error "Notion API Error: #{e.message}"
-    return nil
-  end
-
-  # General Method to Retrieve a Property Value from a Page
-  def get_property_value(page:, property_name:)
-    property = page['properties'][property_name] rescue nil
-    return nil unless property
-
-    case property['type']
-    when 'number'
-      return property['number']
-    when 'checkbox'
-      return property['checkbox']
-    when 'title'
-      return property['title'].map { |t| t['plain_text'] }.join
-    else
-      nil
-    end
+    nil
   end
 
   # General method to update page properties
-  def update_page_properties(page_id, properties)
+  def update_page(page_id:, input_values: {}, relations: {})
+    page = @client.page(page_id: page_id)
+    database_key = identify_database_key_from_page(page)
+    return unless database_key
+
+    properties = construct_properties(database_key: database_key, input_values: input_values, relations: relations)
+
     @client.update_page(
       page_id: page_id,
       properties: properties
     )
+    @action_log << { message: "Updated page properties for page ID '#{page_id}'" }
   rescue Notion::Api::Errors::NotionError => e
     @action_log << "Error updating page #{page_id}: #{e.message}"
+    Rails.logger.error "Notion API Error: #{e.message}"
+  end
+
+  # Helper method to construct properties based on the schema
+  def construct_properties(database_key:, input_values:, relations: {})
+    schema = SCHEMA[database_key]
+    properties = {}
+
+    # Construct properties
+    schema[:properties]&.each do |key, prop_schema|
+      value = input_values[key]
+      next unless value
+      properties[prop_schema[:name]] = construct_property_value(prop_schema[:type], value)
+    end
+
+    # Construct relations
+    relations.each do |relation_key, related_page_ids|
+      relation_schema = schema[:relations][relation_key]
+      next unless relation_schema
+      properties[relation_schema[:name]] = construct_property_value('relation', related_page_ids)
+    end
+
+    properties
   end
 
   # Method to construct property value based on type
@@ -192,61 +182,78 @@ class NotionService
     end
   end
 
-  # Method to find or create an entity with direct and indirect matching
-  def find_or_create_entity(name:, relation_field:)
-    db_key = relation_field.to_sym
-    page = find_page_by_title(db_key, name)
-  
+  # General method to find or create an entity
+  def find_or_create_entity(name:, database_key:)
+    page = find_page_by_title(database_key, name)
     if page
-      return [page['id'], 'direct']
+      [page['id'], 'direct']
     else
-      titles = get_all_titles_from_database(db_key)
+      titles = get_all_titles_from_database(database_key)
       best_match = find_best_match(search_term: name, options: titles)
-  
       if best_match && best_match != "No match"
-        matched_page = find_page_by_title(db_key, best_match)
+        matched_page = find_page_by_title(database_key, best_match)
         return [matched_page['id'], 'indirect'] if matched_page
       end
-  
-      new_page = create_entity(db_key, name)
-      return [new_page['id'], 'created']
+      new_page = create_page(database_key: database_key, input_values: { title: name })
+      [new_page['id'], 'created']
     end
   end
 
-  def add_relations_to_page(page_id:, relations_hash:, item_type:)
-    properties = {}
-  
-    # Pluralize the item_type to match SCHEMA keys
-    plural_item_type = item_type.pluralize.to_sym
-  
-    relations_hash.each do |relation_field, page_ids|
-      # Fetch the correct property name from the SCHEMA using plural_item_type
-      property_schema = SCHEMA[plural_item_type]&.dig(:relations, relation_field)
-  
-      if property_schema && property_schema[:name]
-        property_name = property_schema[:name]
-        properties[property_name] = {
-          'relation' => page_ids.map { |id| { 'id' => id } }
-        }
-      else
-        @action_log << "Relation field '#{relation_field}' not found in SCHEMA for item type '#{plural_item_type}'."
-        Rails.logger.error "Relation field '#{relation_field}' not found in SCHEMA for item type '#{plural_item_type}'."
-      end
-    end
-  
-    # Proceed only if there are valid properties to update
-    if properties.any?
-      @client.update_page(
-        page_id: page_id,
-        properties: properties
-      )
-      @action_log << "Added relations to page ID '#{page_id}'."
+  # General method to find a page by title
+  def find_page_by_title(database_key, title)
+    database_id = DATABASES[database_key]
+    title_property = SCHEMA[database_key][:properties][:title][:name]
+    filter = {
+      property: title_property,
+      title: { equals: title }
+    }
+
+    response = @client.database_query(
+      database_id: database_id,
+      filter: filter
+    )
+
+    if response && response['results'] && !response['results'].empty?
+      response['results'].first
     else
-      @action_log << "No valid relations to add for page ID '#{page_id}'."
+      Rails.logger.warn "No page found for title '#{title}' in database '#{database_key}'."
+      nil
     end
-  
   rescue Notion::Api::Errors::NotionError => e
-    @action_log << "Failed to add relations: #{e.message}"
+    @action_log << "Error querying database #{database_key}: #{e.message}"
+    Rails.logger.error "Notion API Error: #{e.message}"
+    nil
+  end
+
+  # General method to get property value from a page
+  def get_property_value(page:, property_name:)
+    property = page['properties'][property_name] rescue nil
+    return nil unless property
+
+    case property['type']
+    when 'number'
+      property['number']
+    when 'checkbox'
+      property['checkbox']
+    when 'title'
+      property['title'].map { |t| t['plain_text'] }.join
+    when 'date'
+      property['date']['start'] rescue nil
+    when 'status'
+      property['status']['name'] rescue nil
+    when 'relation'
+      property['relation'].map { |rel| rel['id'] }
+    else
+      nil
+    end
+  end
+
+  # Method to append children to a page
+  def append_children_to_page(page_id:, children:)
+    @client.append_block_children(block_id: page_id, children: children)
+    @action_log << "Appended children to page ID '#{page_id}'."
+  rescue Notion::Api::Errors::NotionError => e
+    @action_log << "Failed to append children: #{e.message}"
     Rails.logger.error "Notion API Error: #{e.message}"
     raise
   end
@@ -254,7 +261,7 @@ class NotionService
   # Helper method to get all titles from a database
   def get_all_titles_from_database(database_key)
     database_id = DATABASES[database_key]
-    title_property = SCHEMA[database_key][:title][:name]
+    title_property = SCHEMA[database_key][:properties][:title][:name]
 
     titles = []
     start_cursor = nil
@@ -280,209 +287,58 @@ class NotionService
     openai_service.find_best_match(search_term: search_term, options: options)
   end
 
-  # Helper method to create a new entity
-  def create_entity(database_key, name)
-    title_property = SCHEMA[database_key][:title]
-    properties = {
-      title_property[:name] => construct_property_value(title_property[:type], name)
-    }
-
-    response = @client.create_page(
-      parent: { database_id: DATABASES[database_key] },
-      properties: properties
-    )
-
-    @action_log << "Created new #{database_key.to_s.capitalize} '#{name}'."
-    response
-  end
-
-  # Method to add a note
-  def add_note(title:, body:, date:, relations: {})
-    db_id = DATABASES[:notes]
-    properties = {
-      SCHEMA[:notes][:title][:name] => {
-        'title' => [
-          {
-            'text' => {
-              'content' => title
-            }
-          }
-        ]
-      },
-      SCHEMA[:notes][:date][:name] => {
-        'date' => {
-          'start' => date
-        }
-      }
-    }
-
-    # Define the content of the page as children blocks
-    children = [
-      {
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text',
-              text: {
-                'content' => body
-              }
-            }
-          ]
-        }
-      }
-    ]
-
-    response = @client.create_page(
-      parent: { database_id: db_id },
-      properties: properties,
-      children: children
-    )
-
-    page_id = response['id']
-    page_url = construct_notion_url(page_id)
-    page_title = get_page_title(page_id)
-
-    @action_log << { message: "Created Note: '#{page_title}'", url: page_url }
-    response
-  end
-
-  # Method to add a task
-  def add_task(task_name:, deadline:, action_date:, relations: {})
-    db_id = DATABASES[:tasks]
-    properties = {
-      SCHEMA[:tasks][:title][:name] => {
-        'title' => [
-          {
-            'text' => {
-              'content' => task_name
-            }
-          }
-        ]
-      },
-      SCHEMA[:tasks][:deadline][:name] => {
-        'date' => {
-          'start' => deadline
-        }
-      },
-      SCHEMA[:tasks][:action_date][:name] => {
-        'date' => {
-          'start' => action_date
-        }
-      },
-      SCHEMA[:tasks][:status][:name] => {
-        'status' => {
-          'name' => 'Next'
-        }
-      }
-    }
-
-    response = @client.create_page(
-      parent: { database_id: db_id },
-      properties: properties
-    )
-
-    page_id = response['id']
-    page_url = construct_notion_url(page_id)
-    page_title = get_page_title(page_id)
-
-    @action_log << { message: "Created Task: '#{page_title}'", url: page_url }
-    response
-  end
-
-  # Method to add a task
-  def add_recommendation(name:, type:, relations: {})
-    db_id = DATABASES[:tasks]
-    properties = {
-      SCHEMA[:recommendations][:title][:name] => {
-        'title' => [
-          {
-            'text' => {
-              'content' => name
-            }
-          }
-        ]
-      }
-    }
-
-    response = @client.create_page(
-      parent: { database_id: db_id },
-      properties: properties
-    )
-
-    page_id = response['id']
-    page_url = construct_notion_url(page_id)
-    page_title = get_page_title(page_id)
-
-    @action_log << { message: "Created Recommendation: '#{page_title}'", url: page_url }
-    response
-  end
-
-  # Method to update multiple ingredients
-  def update_ingredients(ingredients)
-    ingredients.each do |ingredient|
-      name = ingredient['name']
-      quantity_to_add = ingredient['quantity'].to_i
-
-      page_id, match_type = find_or_create_entity(name: name, relation_field: :ingredients)
-
-      if page_id
-        current_amount = get_property_value(page: page_id, property_name: 'Amount Needed') || 0
-        new_amount = current_amount + quantity_to_add
-
-        properties = {
-          'Amount Needed' => construct_property_value('number', new_amount)
-        }
-
-        update_page_properties(page_id, properties)
-        ingredient['page_id'] = page_id
-        ingredient['match_type'] = match_type
-        page_url = construct_notion_url(page_id)
-        page_title = get_page_title(page_id)
-
-        @action_log << { message: "Updated Ingredient: '#{page_title}' to Quantity: #{new_amount}", url: page_url }
-      else
-        @action_log << { message: "Failed to process Ingredient: '#{name}'", url: nil }
-      end
+  # Method to get the page title
+  def get_page_title(page_id)
+    page = @client.page(page_id: page_id)
+    title_property_name = page['properties'].find { |_, prop| prop['type'] == 'title' }&.first
+    if title_property_name
+      title = get_property_value(page: page, property_name: title_property_name)
+      title || "Untitled Page"
+    else
+      "Untitled Page"
     end
+  rescue Notion::Api::Errors::NotionError => e
+    Rails.logger.error "Error retrieving title for Page ID #{page_id}: #{e.message}"
+    "Error fetching title"
   end
 
-  # Method to update multiple recipes
-  def update_recipes(recipes)
-    recipes.each do |recipe|
-      page_id, match_type = find_or_create_entity(name: recipe, relation_field: :recipes)
-
-      if page_id
-        properties = {
-          'Planned' => construct_property_value('checkbox', true)
-        }
-
-        update_page_properties(page_id, properties)
-        page_url = construct_notion_url(page_id)
-        page_title = get_page_title(page_id)
-
-        @action_log << { message: "Marked Recipe as Planned: '#{page_title}'", url: page_url }
-      else
-        @action_log << { message: "Failed to process Recipe: '#{recipe}'", url: nil }
-      end
-    end
-  end
-
+  # Method to construct Notion page URL
   def construct_notion_url(page_id)
     formatted_id = page_id.gsub(/-/, '')
     "#{NOTION_BASE_URL}#{formatted_id}"
   end
 
-  def log_action_with_title(page_id, relations)
-    title = get_page_title(page_id)
-    page_link = "[#{title}](https://www.notion.so/#{page_id})"
-  
-    relations_descriptions = relations.map do |relation_field, related_page_ids|
-      related_titles = related_page_ids.map { |id| get_page_title(id) }
-      "#{relation_field.capitalize}: #{related_titles.join(', ')}"
-    end.join("; ")
-  
-    "Page created: #{page_link} with relations: #{relations_descriptions}."
+  # Helper method to identify database key from page
+  def identify_database_key_from_page(page)
+    parent = page['parent']
+    if parent['type'] == 'database_id'
+      database_id = parent['database_id']
+      DATABASES.key(database_id)
+    else
+      nil
+    end
+  end
+
+  # General method to update items (e.g., ingredients, recipes)
+  def update_items(database_key, items, update_values = {})
+    items.each do |item|
+      name = item['name']
+      page_id, match_type = find_or_create_entity(name: name, database_key: database_key)
+
+      if page_id
+        page = @client.page(page_id: page_id)
+        input_values = update_values.call(page, item)
+        update_page(page_id: page_id, input_values: input_values)
+
+        item['page_id'] = page_id
+        item['match_type'] = match_type
+        page_url = construct_notion_url(page_id)
+        page_title = get_page_title(page_id)
+
+        @action_log << { message: "Updated #{database_key.to_s.capitalize} '#{page_title}'", url: page_url }
+      else
+        @action_log << { message: "Failed to process #{database_key.to_s.capitalize}: '#{name}'", url: nil }
+      end
+    end
   end
 end
