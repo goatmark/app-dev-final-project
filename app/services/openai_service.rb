@@ -52,7 +52,7 @@ class OpenaiService
       - task
       Each of these classifiers will lead to a set of appropriate events. Key examples:
       - Suggesting items should be added to the shopping list should update the 'ingredients' database such that 'Shopping List' field is true
-      - Suggesting I intend to make something or cook something should be treated 
+      - Suggesting I intend to make something or cook something should be treated as a 'recipe' 
       - Suggesting something is a 'task' will proceed to extract its start date and deadline (where applicable)
       - Saying 'I should read more about nihilism' will create an entry on the 'recommendations' DB with "nihilism" as the title
       - Any ambiguity should default to 'note'
