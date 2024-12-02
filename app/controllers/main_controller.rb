@@ -141,15 +141,15 @@ class MainController < ApplicationController
     Rails.logger.debug "Parsing result: #{@result}"
     case @result
     when "note"
-      process_note_transcription(notion_service)
+      process_note_transcription(notion_service, @note)
     when "task"
-      process_task_transcription(notion_service)
+      process_task_transcription(notion_service, @note)
     when "recommendation"
-      process_recommendation_transcription(notion_service)
+      process_recommendation_transcription(notion_service, @note)
     when "ingredient"
-      process_ingredient_transcription(notion_service)
+      process_ingredient_transcription(notion_service, @note)
     when "recipe"
-      process_recipe_transcription(notion_service)
+      process_recipe_transcription(notion_service, @note)
     else
       Rails.logger.error "Could not classify the transcription."
       return { success: false, error: 'Could not classify the transcription.' }
@@ -162,12 +162,12 @@ class MainController < ApplicationController
     Rails.logger.error "Processing transcription failed: #{e.message}"
     return { success: false, error: 'An error occurred during processing.' }
   end
-
-  def process_note_transcription(notion_service)
+  
+  def process_note_transcription(notion_service, note)
     openai_service = OpenaiService.new
 
-    @body = openai_service.extract_note_body(message: @note)
-    @title = openai_service.extract_note_title(message: @note)
+    @body = openai_service.extract_note_body(message: note)
+    @title = openai_service.extract_note_title(message: note)
     @related_entities = openai_service.extract_related_entities(message: @note) || []
 
     input_values = {
@@ -202,13 +202,13 @@ class MainController < ApplicationController
     )
   end
 
-  def process_task_transcription(notion_service)
+  def process_task_transcription(notion_service, note)
     openai_service = OpenaiService.new
 
-    @task = openai_service.extract_task_summary(message: @note)
-    @deadline = openai_service.extract_deadline(message: @note)
-    @action_date = openai_service.extract_action_date(message: @note)
-    @related_entities = openai_service.extract_related_entities(message: @note) || []
+    @task = openai_service.extract_task_summary(message: note)
+    @deadline = openai_service.extract_deadline(message: note)
+    @action_date = openai_service.extract_action_date(message: note)
+    @related_entities = openai_service.extract_related_entities(message: note) || []
 
     input_values = {
       title: @task,
@@ -226,12 +226,12 @@ class MainController < ApplicationController
     )
   end
 
-  def process_recommendation_transcription(notion_service)
+  def process_recommendation_transcription(notion_service, note)
     openai_service = OpenaiService.new
 
-    @recommendation = openai_service.extract_recommendation_summary(message: @note)
-    @recommendation_type = openai_service.extract_recommendation_type(message: @note)
-    @related_entities = openai_service.extract_related_entities(message: @note) || []
+    @recommendation = openai_service.extract_recommendation_summary(message: note)
+    @recommendation_type = openai_service.extract_recommendation_type(message: note)
+    @related_entities = openai_service.extract_related_entities(message: note) || []
 
     input_values = {
       title: @recommendation
@@ -246,10 +246,10 @@ class MainController < ApplicationController
     )
   end
 
-  def process_ingredient_transcription(notion_service)
+  def process_ingredient_transcription(notion_service, note)
     openai_service = OpenaiService.new
 
-    @ingredients = openai_service.extract_ingredients(message: @note) || []
+    @ingredients = openai_service.extract_ingredients(message: note) || []
 
     update_values = lambda do |page, item|
       current_amount = notion_service.get_property_value(page: page, property_name: SCHEMA[:ingredients][:properties][:amount_needed][:name]) || 0
@@ -260,14 +260,14 @@ class MainController < ApplicationController
     notion_service.update_items(:ingredients, @ingredients, update_values)
   end
 
-  def process_recipe_transcription(notion_service)
+  def process_recipe_transcription(notion_service, note)
     openai_service = OpenaiService.new
 
-    @recipes = openai_service.extract_recipes(message: @note) || []
+    @recipes = openai_service.extract_recipes(message: note) || []
 
     update_values = lambda do |_page, _item|
       { planned: true }
-    end
+    endbi
 
     notion_service.update_items(:recipes, @recipes, update_values)
   end
