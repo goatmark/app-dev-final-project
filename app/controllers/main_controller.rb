@@ -184,12 +184,17 @@ class MainController < ApplicationController
     recording.status = 'complete'
     recording.save
 
+    Rails.logger.debug "Recording saved."
+
     input_values = {
       title: title,
       date: Date.today.strftime('%Y-%m-%d')
     }
 
+    Rails.logger.debug "Input hash: #{input_values}"
     relations_hash = process_entities(notion_service, 'notes')
+
+    Rails.logger.debug "Relations hash: #{relations_hash}"
 
     children = [
       {
@@ -208,12 +213,16 @@ class MainController < ApplicationController
       }
     ]
 
+    Rails.logger.debug "Children: #{children}"
+
     page_id = notion_service.create_page(
       database_key: :notes,
       input_values: input_values,
       relations: relations_hash,
       children: children
     )
+
+    Rails.logger.debug "Page ID: #{page_id}"
 
     activity = Activity.new
     activity.recording_id = recording.id
