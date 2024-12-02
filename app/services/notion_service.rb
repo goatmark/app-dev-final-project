@@ -12,6 +12,7 @@ class NotionService
     recipes: ENV.fetch("RECIPES_DB_KEY"),
     recommendations: ENV.fetch("RECOMMENDATIONS_DB_KEY"),
     ideas: ENV.fetch("IDEAS_DB_KEY")
+    wordle_games: ENV.fetch("WORDLE_GAMES_DB_KEY")
   }.freeze
 
   # New constant mapping database keys to their title property names
@@ -24,7 +25,8 @@ class NotionService
     ingredients: 'Ingredient',
     recipes: 'Name',
     recommendations: 'Name',
-    ideas: 'Name'
+    ideas: 'Name',
+    wordle_games: "#"
   }.freeze
 
   # Base URL for Notion pages
