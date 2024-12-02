@@ -1,5 +1,3 @@
-# app/controllers/main_controller.rb
-
 require 'streamio-ffmpeg'
 
 class MainController < ApplicationController
@@ -86,7 +84,7 @@ class MainController < ApplicationController
         [temp_audio_path, converted_audio_path].each do |path|
           if path && File.exist?(path)
             File.delete(path)
-            Rails.logger.debug "Temporary audio file #{path} deleted."
+            Rails.logger.debug "Temporary audio file deleted."
           end
         end
       end
@@ -159,7 +157,6 @@ class MainController < ApplicationController
       return { success: false, error: 'Could not classify the transcription.' }
     end
 
-    Rails.logger.debug "Updating action log."
     action_log = notion_service.action_log
     Rails.logger.debug "Action log updated."
     return { success: true, action_log: action_log }
@@ -167,35 +164,45 @@ class MainController < ApplicationController
     Rails.logger.error "Processing transcription failed: #{e.message}"
     return { success: false, error: 'An error occurred during processing.' }
   end
-  
+
   def process_note_transcription(openai_service, notion_service, note)
-
     body = openai_service.extract_note_body(message: note)
-    Rails.logger.debug "Body: #{body}"
     title = openai_service.extract_note_title(message: note)
-    Rails.logger.debug "Title: #{title}"
     related_entities = openai_service.extract_related_entities(message: note) || []
-    Rails.logger.debug "Related Entities: #{related_entities}"
 
-    recording = Recording.new
-    recording.body = note
-    recording.summary = title
-    recording.recording_type = 'note'
-    recording.status = 'complete'
-    recording.save
+    recording = Recording.create(
+      body: note,
+      summary: title,
+      recording_type: 'note',
+      status: 'complete'
+    )
 
-    Rails.logger.debug "Recording saved."
-
-    input_values = {
-      title: title,
-      date: Date.today.strftime('%Y-%m-%d')
+    properties_hash = {
+      'Meeting' => { type: 'title', value: title },
+      'Date' => { type: 'date', value: Date.today.strftime('%Y-%m-%d') }
     }
 
-    Rails.logger.debug "Input hash: #{input_values}"
-    relations_hash = process_entities(notion_service, 'notes', related_entities)
+    # Process related entities to construct relations
+    related_entities.each do |entity|
+      page_id, match_type = notion_service.find_or_create_entity(
+        name: entity['name'],
+        database_key: entity['type'].to_sym
+      )
+      relation_name = case entity['type']
+                      when 'people' then 'People'
+                      when 'companies' then 'Company'
+                      when 'classes' then 'Class'
+                      else nil
+                      end
+      next unless relation_name
 
-    Rails.logger.debug "Relations hash: #{relations_hash}"
+      properties_hash[relation_name] ||= { type: 'relation', value: [] }
+      properties_hash[relation_name][:value] << page_id
+    end
 
+    properties = notion_service.construct_properties(properties_hash)
+
+    # Children (e.g., the body content)
     children = [
       {
         object: 'block',
@@ -213,170 +220,169 @@ class MainController < ApplicationController
       }
     ]
 
-    Rails.logger.debug "Children: #{children}"
-
-    page_id = notion_service.create_page(
-      database_key: :notes,
-      input_values: input_values,
-      relations: relations_hash,
+    payload = {
+      parent: { database_id: NotionService::DATABASES[:notes] },
+      properties: properties,
       children: children
+    }
+
+    response = notion_service.create_page(payload)
+    page_id = response['id']
+
+    Activity.create(
+      recording_id: recording.id,
+      page_id: page_id,
+      page_url: notion_service.construct_notion_url(page_id),
+      action: 'created',
+      database_id: ENV.fetch("NOTES_DB_KEY"),
+      database_name: 'notes',
+      status: 'completed'
     )
-
-    Rails.logger.debug "Page ID: #{page_id}"
-
-    activity = Activity.new
-    activity.recording_id = recording.id
-    activity.page_id = page_id
-    activity.page_url = notion_service.construct_notion_url(page_id)
-    activity.action = 'created'
-    activity.action_type = 'created'
-    activity.database_id = ENV.fetch("NOTES_DB_KEY")
-    activity.database_name = 'notes'
-    # activity.payload = input_values
-    activity.status = 'completed'
-    activity.save
-
   end
 
   def process_task_transcription(openai_service, notion_service, note)
-
-    Rails.logger.debug "Transcription: #{note}"
     task = openai_service.extract_task_summary(message: note)
     deadline = openai_service.extract_deadline(message: note)
     action_date = openai_service.extract_action_date(message: note)
     related_entities = openai_service.extract_related_entities(message: note) || []
 
-    recording = Recording.new
-    recording.body = note
-    recording.summary = task
-    recording.recording_type = 'task'
-    recording.status = 'complete'
-    recording.save
-
-    input_values = {
-      title: task,
-      deadline: deadline,
-      action_date: action_date,
-      status: 'Next'
-    }
-
-    relations_hash = process_entities(notion_service, 'tasks', related_entities)
-
-    page_id = notion_service.create_page(
-      database_key: :tasks,
-      input_values: input_values,
-      relations: relations_hash,
-      children: []
+    recording = Recording.create(
+      body: note,
+      summary: task,
+      recording_type: 'task',
+      status: 'complete'
     )
 
-    Rails.logger.debug "Page ID: #{page_id}"
+    properties_hash = {
+      'Name' => { type: 'title', value: task },
+      'Deadline' => { type: 'date', value: deadline },
+      'Action Date' => { type: 'date', value: action_date },
+      'Status' => { type: 'status', value: 'Next' }
+    }
 
-    activity = Activity.new
-    activity.recording_id = recording.id
-    activity.page_id = page_id
-    activity.page_url = notion_service.construct_notion_url(page_id)
-    activity.action = 'created'
-    activity.action_type = 'created'
-    activity.database_id = ENV.fetch("TASKS_DB_KEY")
-    activity.database_name = 'tasks'
-    # activity.payload = input_values
-    activity.status = 'completed'
-    activity.save
+    # Process related entities to construct relations
+    related_entities.each do |entity|
+      page_id, match_type = notion_service.find_or_create_entity(
+        name: entity['name'],
+        database_key: entity['type'].to_sym
+      )
+      relation_name = case entity['type']
+                      when 'people' then 'People'
+                      when 'companies' then 'Company'
+                      when 'classes' then 'Class'
+                      else nil
+                      end
+      next unless relation_name
+
+      properties_hash[relation_name] ||= { type: 'relation', value: [] }
+      properties_hash[relation_name][:value] << page_id
+    end
+
+    properties = notion_service.construct_properties(properties_hash)
+
+    payload = {
+      parent: { database_id: NotionService::DATABASES[:tasks] },
+      properties: properties
+    }
+
+    response = notion_service.create_page(payload)
+    page_id = response['id']
+
+    Activity.create(
+      recording_id: recording.id,
+      page_id: page_id,
+      page_url: notion_service.construct_notion_url(page_id),
+      action: 'created',
+      database_id: ENV.fetch("TASKS_DB_KEY"),
+      database_name: 'tasks',
+      status: 'completed'
+    )
   end
 
   def process_recommendation_transcription(openai_service, notion_service, note)
-    @recommendation = openai_service.extract_recommendation_summary(message: note)
-    @recommendation_type = openai_service.extract_recommendation_type(message: note)
-    @related_entities = openai_service.extract_related_entities(message: note) || []
+    recommendation = openai_service.extract_recommendation_summary(message: note)
+    recommendation_type = openai_service.extract_recommendation_type(message: note)
+    related_entities = openai_service.extract_related_entities(message: note) || []
 
-    input_values = {
-      title: @recommendation
+    recording = Recording.create(
+      body: note,
+      summary: recommendation,
+      recording_type: 'recommendation',
+      status: 'complete'
+    )
+
+    properties_hash = {
+      'Name' => { type: 'title', value: recommendation }
     }
 
-    relations_hash = process_entities(openai_service, notion_service, 'recommendations')
+    # Process related entities to construct relations
+    related_entities.each do |entity|
+      page_id, match_type = notion_service.find_or_create_entity(
+        name: entity['name'],
+        database_key: entity['type'].to_sym
+      )
+      relation_name = 'People' if entity['type'] == 'people'
+      next unless relation_name
 
-    notion_service.create_page(
-      database_key: :recommendations,
-      input_values: input_values,
-      relations: relations_hash
+      properties_hash[relation_name] ||= { type: 'relation', value: [] }
+      properties_hash[relation_name][:value] << page_id
+    end
+
+    properties = notion_service.construct_properties(properties_hash)
+
+    payload = {
+      parent: { database_id: NotionService::DATABASES[:recommendations] },
+      properties: properties
+    }
+
+    response = notion_service.create_page(payload)
+    page_id = response['id']
+
+    Activity.create(
+      recording_id: recording.id,
+      page_id: page_id,
+      page_url: notion_service.construct_notion_url(page_id),
+      action: 'created',
+      database_id: ENV.fetch("RECOMMENDATIONS_DB_KEY"),
+      database_name: 'recommendations',
+      status: 'completed'
     )
   end
 
   def process_ingredient_transcription(openai_service, notion_service, note)
     Rails.logger.debug "Transcription: #{note}"
-    @ingredients = openai_service.extract_ingredients(message: note) || []
-    Rails.logger.debug "Ingredients: #{@ingredients}"
-  
-    recording = Recording.new
-    recording.body = note
-    recording.summary = 'Update to shopping list.'
-    recording.recording_type = 'ingredient'
-    recording.status = 'complete'
-    recording.save
-  
+    ingredients = openai_service.extract_ingredients(message: note) || []
+    Rails.logger.debug "Ingredients: #{ingredients}"
+
+    recording = Recording.create(
+      body: note,
+      summary: 'Update to shopping list.',
+      recording_type: 'ingredient',
+      status: 'complete'
+    )
+
     update_values = lambda do |page, item|
-      Rails.logger.debug "Inside update_values lambda for item: #{item}"
-    
       current_amount = notion_service.get_property_value(
         page: page,
-        property_name: NotionService::SCHEMA[:ingredients][:properties][:amount_needed][:name]
+        property_name: 'Amount Needed'
       ) || 0
-      Rails.logger.debug "Current amount_needed for '#{item['name']}' is: #{current_amount}"
-    
       new_amount = current_amount + item['quantity'].to_i
-      Rails.logger.debug "New amount_needed for '#{item['name']}' will be: #{new_amount}"
-    
-      return ({ amount_needed: new_amount })
+      Rails.logger.debug "#{item['name']} will be adjusted from #{current_amount} to #{new_amount}"
+      { 'Amount Needed' => { type: 'number', value: new_amount } }
     end
-    
-    Rails.logger.debug "update_values lambda defined: #{update_values}"
-  
-    notion_service.update_items(:ingredients, @ingredients, update_values)
 
-    Rails.logger.debug "Update items complete!"
+    Rails.logger.debug "update_values lambda defined: #{update_values}"
+
+    notion_service.update_items(:ingredients, ingredients, update_values)
   end
 
   def process_recipe_transcription(openai_service, notion_service, note)
-
-    @recipes = openai_service.extract_recipes(message: note) || []
+    recipes = openai_service.extract_recipes(message: note) || []
 
     update_values = lambda do |_page, _item|
-      { planned: true }
+      { 'Planned' => { type: 'checkbox', value: true } }
     end
 
-    notion_service.update_items(:recipes, @recipes, update_values)
-  end
-
-  def process_entities(notion_service, database_key, related_entities)
-    return {} if related_entities.nil?
-    relations_hash = {}
-    related_entities.each do |entity|
-      relation_field = get_relation_field_for_entity_type(entity['type'], database_key)
-      next unless relation_field
-
-      relation_schema = NotionService::SCHEMA[database_key.to_sym][:relations][relation_field.to_sym]
-      entity_database_key = relation_schema[:database]
-
-      page_id, match_type = notion_service.find_or_create_entity(
-        name: entity['name'],
-        database_key: entity_database_key
-      )
-
-      relations_hash[relation_field.to_sym] ||= []
-      relations_hash[relation_field.to_sym] << page_id if page_id
-
-      entity['page_id'] = page_id
-      entity['match_type'] = match_type
-    end
-    relations_hash
-  end
-
-  def get_relation_field_for_entity_type(entity_type, database_key)
-    NotionService::SCHEMA[database_key.to_sym][:relations].each do |relation_key, relation_schema|
-      if relation_schema[:database].to_s == entity_type.to_s.pluralize
-        return relation_key.to_s
-      end
-    end
-    nil
+    notion_service.update_items(:recipes, recipes, update_values)
   end
 end
