@@ -53,7 +53,7 @@ class OpenaiService
       - wordle
       - restaurant
     Each of these classifiers will lead to a set of appropriate events. Key examples:
-      - Suggesting items to add to the shopping list should update the 'ingredient' database such that the 'Shopping List' field is true.
+      - Suggesting items to add to the shopping list should update the 'ingredient' database such that the 'Shopping List' field is true. A message comprising a single ingredient, household item, or foodstuff should also certainly return an 'ingredient'.
       - Suggesting an intention to make or cook something should be treated as a 'recipe'.
       - Mentioning scores or games played in Wordle should be classified as 'wordle'. A message like '2-3 Mark' or 'My girlfriend beat me today 3-4', or even just '5-5' falls into the 'wordle' category. 
       - Recommending or mentioning a restaurant should be classified as 'restaurant'.
