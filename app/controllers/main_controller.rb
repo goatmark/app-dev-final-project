@@ -152,6 +152,9 @@ class MainController < ApplicationController
       process_ingredient_transcription(openai_service, notion_service, transcription)
     when "recipe"
       process_recipe_transcription(openai_service, notion_service, transcription)
+    when "wordle"
+    when "restaurant"
+    when "idea"
     else
       Rails.logger.error "Could not classify the transcription."
       return { success: false, error: 'Could not classify the transcription.' }
@@ -264,15 +267,9 @@ class MainController < ApplicationController
     # Process related entities to construct relations
     related_entities.each do |entity|
       Rails.logger.debug "Entity: #{entity['name']}, #{entity['type'].to_sym}."
-      adjusted_entity_type =  case entity['type']
-                                when 'person' then 'people'
-                                when 'class' then 'classes'
-                                when 'company' then 'companies'
-                                else entity['type']
-                              end 
       page_id, match_type = notion_service.find_or_create_entity(
         name: entity['name'],
-        database_key: adjusted_entity_type.to_sym
+        database_key: entity['type'].pluralize.to_sym
       )
       relation_name = case entity['type']
                       when 'person', 'people' then 'People'
@@ -310,8 +307,9 @@ class MainController < ApplicationController
   def process_recommendation_transcription(openai_service, notion_service, note)
     recommendation = openai_service.extract_recommendation_summary(message: note)
     recommendation_type = openai_service.extract_recommendation_type(message: note)
-    related_entities = openai_service.extract_related_entities(message: note) || []
+    people_entities = openai_service.extract_related_entities(message: note, default: false) || []
 
+    Rails.logger.debug "Recommendation: #{recommendation}, type: #{recommendation_type}, people: #{people_entities}"
     recording = Recording.create(
       body: note,
       summary: recommendation,
@@ -323,13 +321,18 @@ class MainController < ApplicationController
       'Name' => { type: 'title', value: recommendation }
     }
 
-    # Process related entities to construct relations
-    related_entities.each do |entity|
+    # Process people_entities to assign authors and recommenders
+    people_entities.each do |entity|
       page_id, match_type = notion_service.find_or_create_entity(
         name: entity['name'],
-        database_key: entity['type'].to_sym
+        database_key: :people
       )
-      relation_name = 'People' if entity['type'] == 'people'
+      # Map 'author' and 'recommender' to the correct fields
+      relation_name = case entity['type']
+                      when 'recommender' then 'People'   # Field for recommenders
+                      when 'author' then 'Authors'      # Field for authors
+                      else nil
+                      end
       next unless relation_name
 
       properties_hash[relation_name] ||= { type: 'relation', value: [] }

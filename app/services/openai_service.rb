@@ -188,21 +188,38 @@ class OpenaiService
     return body
   end
 
-  def extract_related_entities(message:)
-    prompt = <<~PROMPT
-      From the following message, extract all specific names of people, specific classes (courses offered at Booth), or companies mentioned that could be relations in a Notion database.
-      Do not include generic terms or groups like "MBA students" or "students".
-      For each entity, identify its type as one of: "person", "class", or "company".
-      Return the results in JSON format as an array of objects with "name" and "type" keys.
-      **Do not include any code block markers, triple backticks, or any additional text before or after the JSON.**
-      Example:
-      [
-        {"name": "Mark Khoury", "type": "person"},
-        {"name": "Digital Marketing Lab", "type": "class"},
-        {"name": "North Face", "type": "company"}
-      ]
-      Message: "#{message}"
-    PROMPT
+  def extract_related_entities(message:, default: true)
+    if default
+      prompt = <<~PROMPT
+        From the following message, extract all specific names of people, specific classes (courses offered at Booth), or companies mentioned that could be relations in a Notion database.
+        Do not include generic terms or groups like "MBA students" or "students".
+        For each entity, identify its type as one of: "person", "class", or "company".
+        Return the results in JSON format as an array of objects with "name" and "type" keys.
+        **Do not include any code block markers, triple backticks, or any additional text before or after the JSON.**
+        Example:
+        [
+          {"name": "Mark Khoury", "type": "person"},
+          {"name": "Digital Marketing Lab", "type": "class"},
+          {"name": "North Face", "type": "company"}
+        ]
+        Message: "#{message}"
+      PROMPT
+    else
+      prompt = <<~PROMPT
+        From the following message, extract all specific names of people, and classify them as either "recommender" or "author".
+
+        - Do not include generic terms or groups like "MBA students" or "students".
+        - Return the results in JSON format as an array of objects with "name" and "type" keys.
+        - **Do not include any code block markers, triple backticks, or any additional text before or after the JSON.**
+
+        Example:
+        [
+          {"name": "Lydia Wang", "type": "recommender"},
+          {"name": "Albert Einstein", "type": "author"}
+        ]
+        Message: "#{message}"
+      PROMPT
+    end
 
     response = @client.chat(
       parameters: {
