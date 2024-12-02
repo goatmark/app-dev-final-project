@@ -192,7 +192,7 @@ class MainController < ApplicationController
     }
 
     Rails.logger.debug "Input hash: #{input_values}"
-    relations_hash = process_entities(notion_service, 'notes')
+    relations_hash = process_entities(notion_service, 'notes', related_entities)
 
     Rails.logger.debug "Relations hash: #{relations_hash}"
 
@@ -227,36 +227,61 @@ class MainController < ApplicationController
     activity = Activity.new
     activity.recording_id = recording.id
     activity.page_id = page_id
+    activity.page_url = notion_service.construct_notion_url(page_id)
     activity.action = 'created'
     activity.action_type = 'created'
     activity.database_id = ENV.fetch("NOTES_DB_KEY")
     activity.database_name = 'notes'
-    activity.payload = input_values
+    # activity.payload = input_values
     activity.status = 'completed'
-    activity.new
+    activity.save
 
   end
 
   def process_task_transcription(openai_service, notion_service, note)
-    @task = openai_service.extract_task_summary(message: note)
-    @deadline = openai_service.extract_deadline(message: note)
-    @action_date = openai_service.extract_action_date(message: note)
-    @related_entities = openai_service.extract_related_entities(message: note) || []
+
+    Rails.logger.debug "Transcription: #{note}"
+    task = openai_service.extract_task_summary(message: note)
+    deadline = openai_service.extract_deadline(message: note)
+    action_date = openai_service.extract_action_date(message: note)
+    related_entities = openai_service.extract_related_entities(message: note) || []
+
+    recording = Recording.new
+    recording.body = note
+    recording.summary = task
+    recording.recording_type = 'task'
+    recording.status = 'complete'
+    recording.save
 
     input_values = {
-      title: @task,
-      deadline: @deadline,
-      action_date: @action_date,
+      title: task,
+      deadline: deadline,
+      action_date: action_date,
       status: 'Next'
     }
 
-    relations_hash = process_entities(notion_service, 'tasks')
+    relations_hash = process_entities(notion_service, 'tasks', related_entities)
 
-    notion_service.create_page(
+    page_id = notion_service.create_page(
       database_key: :tasks,
       input_values: input_values,
-      relations: relations_hash
+      relations: relations_hash,
+      children: []
     )
+
+    Rails.logger.debug "Page ID: #{page_id}"
+
+    activity = Activity.new
+    activity.recording_id = recording.id
+    activity.page_id = page_id
+    activity.page_url = notion_service.construct_notion_url(page_id)
+    activity.action = 'created'
+    activity.action_type = 'created'
+    activity.database_id = ENV.fetch("TASKS_DB_KEY")
+    activity.database_name = 'tasks'
+    # activity.payload = input_values
+    activity.status = 'completed'
+    activity.save
   end
 
   def process_recommendation_transcription(openai_service, notion_service, note)
@@ -278,16 +303,37 @@ class MainController < ApplicationController
   end
 
   def process_ingredient_transcription(openai_service, notion_service, note)
-
+    Rails.logger.debug "Transcription: #{note}"
     @ingredients = openai_service.extract_ingredients(message: note) || []
-
+    Rails.logger.debug "Ingredients: #{@ingredients}"
+  
+    recording = Recording.new
+    recording.body = note
+    recording.summary = 'Update to shopping list.'
+    recording.recording_type = 'ingredient'
+    recording.status = 'complete'
+    recording.save
+  
     update_values = lambda do |page, item|
-      current_amount = notion_service.get_property_value(page: page, property_name: NotionService::SCHEMA[:ingredients][:properties][:amount_needed][:name]) || 0
+      Rails.logger.debug "Inside update_values lambda for item: #{item}"
+    
+      current_amount = notion_service.get_property_value(
+        page: page,
+        property_name: NotionService::SCHEMA[:ingredients][:properties][:amount_needed][:name]
+      ) || 0
+      Rails.logger.debug "Current amount_needed for '#{item['name']}' is: #{current_amount}"
+    
       new_amount = current_amount + item['quantity'].to_i
-      { amount_needed: new_amount }
+      Rails.logger.debug "New amount_needed for '#{item['name']}' will be: #{new_amount}"
+    
+      return ({ amount_needed: new_amount })
     end
-
+    
+    Rails.logger.debug "update_values lambda defined: #{update_values}"
+  
     notion_service.update_items(:ingredients, @ingredients, update_values)
+
+    Rails.logger.debug "Update items complete!"
   end
 
   def process_recipe_transcription(openai_service, notion_service, note)
@@ -301,9 +347,10 @@ class MainController < ApplicationController
     notion_service.update_items(:recipes, @recipes, update_values)
   end
 
-  def process_entities(notion_service, database_key)
+  def process_entities(notion_service, database_key, related_entities)
+    return {} if related_entities.nil?
     relations_hash = {}
-    @related_entities.each do |entity|
+    related_entities.each do |entity|
       relation_field = get_relation_field_for_entity_type(entity['type'], database_key)
       next unless relation_field
 

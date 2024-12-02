@@ -124,20 +124,32 @@ class NotionService
 
   # General method to update page properties
   def update_page(page_id:, input_values: {}, relations: {})
-    page = @client.page(page_id: page_id)
-    database_key = identify_database_key_from_page(page)
-    return unless database_key
+    Rails.logger.debug "Starting update_page for page_id: #{page_id}"
 
+    page = @client.page(page_id: page_id)
+    database_key = get_database_id_from_page_id(page_id)
+    Rails.logger.debug "Identified database_key: #{database_key}"
+
+    unless database_key
+      Rails.logger.error "Could not identify database key for page_id: #{page_id}"
+      return
+    end
+    Rails.logger.debug "Database key:: #{database_key}"
+    Rails.logger.debug "Input Values: #{input_values}"
+    Rails.logger.debug "Relations: #{relations}"
     properties = construct_properties(database_key: database_key, input_values: input_values, relations: relations)
+    Rails.logger.debug "Constructed properties to update: #{properties}"
 
     @client.update_page(
       page_id: page_id,
       properties: properties
     )
     @action_log << { message: "Updated page properties for page ID '#{page_id}'" }
+    Rails.logger.debug "Successfully updated page_id: #{page_id}"
   rescue Notion::Api::Errors::NotionError => e
     @action_log << "Error updating page #{page_id}: #{e.message}"
-    Rails.logger.error "Notion API Error: #{e.message}"
+    Rails.logger.error "Notion API Error when updating page_id #{page_id}: #{e.message}"
+    Rails.logger.error e.backtrace.join("\n")
   end
 
   # Helper method to construct properties based on the schema
@@ -145,10 +157,15 @@ class NotionService
     schema = SCHEMA[database_key]
     properties = {}
 
+    Rails.logger.debug "Database Key: #{database_key}"
+    Rails.logger.debug "Schema: #{schema}"
     # Construct properties
     schema[:properties]&.each do |key, prop_schema|
+      Rails.logger.debug "Key: #{key}"
+      Rails.logger.debug "Prop Schema: #{prop_schema}"
+      Rails.logger.debug "Schema Properties: #{schema[:properties]}"
       value = input_values[key]
-      next unless value
+      Rails.logger.debug "Value: #{value}"
       properties[prop_schema[:name]] = construct_property_value(prop_schema[:type], value)
     end
 
@@ -308,26 +325,55 @@ class NotionService
     "#{NOTION_BASE_URL}#{formatted_id}"
   end
 
-  # Helper method to identify database key from page
+  # OLD Helper method to identify database key from page
   def identify_database_key_from_page(page)
-    parent = page['parent']
-    if parent['type'] == 'database_id'
-      database_id = parent['database_id']
+    parent = page.parent
+    if parent.type == 'database_id'
+      database_id = parent.database_id
       DATABASES.key(database_id)
     else
       nil
     end
   end
 
+  # NEW Helper method to identify database key from page
+  def get_database_id_from_page_id(page_id)
+    client = Notion::Client.new
+    page = client.page(page_id: page_id)
+    parent = page.parent
+  
+    if parent.type == 'database_id'
+      database_id = parent.database_id
+      return database_id
+    else
+      # The page does not belong directly to a database
+      return nil
+    end
+  rescue Notion::Api::Errors::NotionError => e
+    puts "Error fetching page: #{e.message}"
+    return nil
+  end
+
   # General method to update items (e.g., ingredients, recipes)
   def update_items(database_key, items, update_values = {})
     items.each do |item|
       name = item['name']
+      Rails.logger.debug "Processing item: #{name}"
+
       page_id, match_type = find_or_create_entity(name: name, database_key: database_key)
+      Rails.logger.debug "Found or created page_id: #{page_id}, match_type: #{match_type}"
 
       if page_id
         page = @client.page(page_id: page_id)
+        Rails.logger.debug "Fetched page for item: #{name}"
+
+        # Call the update_values lambda and log the input and output
+        Rails.logger.debug "Calling update_values lambda for item: #{item}"
         input_values = update_values.call(page, item)
+        Rails.logger.debug "Received input_values from update_values lambda: #{input_values}"
+
+        Rails.logger.debug "Updating page_id: #{page_id} with input_values: #{input_values}"
+
         update_page(page_id: page_id, input_values: input_values)
 
         item['page_id'] = page_id
@@ -338,6 +384,7 @@ class NotionService
         @action_log << { message: "Updated #{database_key.to_s.capitalize} '#{page_title}'", url: page_url }
       else
         @action_log << { message: "Failed to process #{database_key.to_s.capitalize}: '#{name}'", url: nil }
+        Rails.logger.error "Failed to find or create entity for name: #{name}"
       end
     end
   end
