@@ -267,7 +267,7 @@ class MainController < ApplicationController
 
     update_values = lambda do |_page, _item|
       { planned: true }
-    endbi
+    end
 
     notion_service.update_items(:recipes, @recipes, update_values)
   end
