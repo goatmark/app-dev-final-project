@@ -132,7 +132,6 @@ class MainController < ApplicationController
   def process_transcription(transcription)
     Rails.logger.debug "Starting process_transcription."
     openai_service = OpenaiService.new
-    @note = transcription
     @todays_date = Date.today.strftime("%Y-%m-%d")
     @result = openai_service.classify_message(message: @note)
 
@@ -141,15 +140,15 @@ class MainController < ApplicationController
     Rails.logger.debug "Parsing result: #{@result}"
     case @result
     when "note"
-      process_note_transcription(notion_service, @note)
+      process_note_transcription(openai_service, notion_service, transcription)
     when "task"
-      process_task_transcription(notion_service, @note)
+      process_task_transcription(openai_service, notion_service, transcription)
     when "recommendation"
-      process_recommendation_transcription(notion_service, @note)
+      process_recommendation_transcription(openai_service, notion_service, transcription)
     when "ingredient"
-      process_ingredient_transcription(notion_service, @note)
+      process_ingredient_transcription(openai_service, notion_service, transcription)
     when "recipe"
-      process_recipe_transcription(notion_service, @note)
+      process_recipe_transcription(openai_service, notion_service, transcription)
     else
       Rails.logger.error "Could not classify the transcription."
       return { success: false, error: 'Could not classify the transcription.' }
@@ -163,12 +162,18 @@ class MainController < ApplicationController
     return { success: false, error: 'An error occurred during processing.' }
   end
   
-  def process_note_transcription(notion_service, note)
-    openai_service = OpenaiService.new
+  def process_note_transcription(openai_service, notion_service, note)
 
     @body = openai_service.extract_note_body(message: note)
     @title = openai_service.extract_note_title(message: note)
     @related_entities = openai_service.extract_related_entities(message: @note) || []
+
+    recording = Recording.new
+    recording.body = transcription
+    recording.summary = @title
+    recording.recording_type = 'note'
+    recording.status = 'complete'
+    recording.save
 
     input_values = {
       title: @title,
@@ -200,11 +205,13 @@ class MainController < ApplicationController
       relations: relations_hash,
       children: children
     )
+
+    activity = Activity.new
+    activity.recording_id = recording.id
+    activity.page_id = 
   end
 
-  def process_task_transcription(notion_service, note)
-    openai_service = OpenaiService.new
-
+  def process_task_transcription(openai_service, notion_service, note)
     @task = openai_service.extract_task_summary(message: note)
     @deadline = openai_service.extract_deadline(message: note)
     @action_date = openai_service.extract_action_date(message: note)
@@ -226,9 +233,7 @@ class MainController < ApplicationController
     )
   end
 
-  def process_recommendation_transcription(notion_service, note)
-    openai_service = OpenaiService.new
-
+  def process_recommendation_transcription(openai_service, notion_service, note)
     @recommendation = openai_service.extract_recommendation_summary(message: note)
     @recommendation_type = openai_service.extract_recommendation_type(message: note)
     @related_entities = openai_service.extract_related_entities(message: note) || []
@@ -237,7 +242,7 @@ class MainController < ApplicationController
       title: @recommendation
     }
 
-    relations_hash = process_entities(notion_service, 'recommendations')
+    relations_hash = process_entities(openai_service, notion_service, 'recommendations')
 
     notion_service.create_page(
       database_key: :recommendations,
@@ -246,13 +251,12 @@ class MainController < ApplicationController
     )
   end
 
-  def process_ingredient_transcription(notion_service, note)
-    openai_service = OpenaiService.new
+  def process_ingredient_transcription(openai_service, notion_service, note)
 
     @ingredients = openai_service.extract_ingredients(message: note) || []
 
     update_values = lambda do |page, item|
-      current_amount = notion_service.get_property_value(page: page, property_name: SCHEMA[:ingredients][:properties][:amount_needed][:name]) || 0
+      current_amount = notion_service.get_property_value(page: page, property_name: NotionService::SCHEMA[:ingredients][:properties][:amount_needed][:name]) || 0
       new_amount = current_amount + item['quantity'].to_i
       { amount_needed: new_amount }
     end
@@ -260,8 +264,7 @@ class MainController < ApplicationController
     notion_service.update_items(:ingredients, @ingredients, update_values)
   end
 
-  def process_recipe_transcription(notion_service, note)
-    openai_service = OpenaiService.new
+  def process_recipe_transcription(openai_service, notion_service, note)
 
     @recipes = openai_service.extract_recipes(message: note) || []
 
@@ -272,13 +275,13 @@ class MainController < ApplicationController
     notion_service.update_items(:recipes, @recipes, update_values)
   end
 
-  def process_entities(notion_service, database_key)
+  def process_entities(openai_service, notion_service, database_key)
     relations_hash = {}
     @related_entities.each do |entity|
       relation_field = get_relation_field_for_entity_type(entity['type'], database_key)
       next unless relation_field
 
-      relation_schema = SCHEMA[database_key.to_sym][:relations][relation_field.to_sym]
+      relation_schema = NotionService::SCHEMA[database_key.to_sym][:relations][relation_field.to_sym]
       entity_database_key = relation_schema[:database]
 
       page_id, match_type = notion_service.find_or_create_entity(
@@ -296,8 +299,8 @@ class MainController < ApplicationController
   end
 
   def get_relation_field_for_entity_type(entity_type, database_key)
-    SCHEMA[database_key.to_sym][:relations].each do |relation_key, relation_schema|
-      if relation_schema[:database] == entity_type.pluralize.to_sym
+    NotionService::SCHEMA[database_key.to_sym][:relations].each do |relation_key, relation_schema|
+      if relation_schema[:database].to_s == entity_type.to_s.pluralize
         return relation_key.to_s
       end
     end

@@ -51,12 +51,12 @@ class OpenaiService
       - recommendation
       - task
       Each of these classifiers will lead to a set of appropriate events. Key examples:
-      - Suggesting items should be added to the shopping list should update the 'ingredients' database such that 'Shopping List' field is true
+      - Suggesting items should be added to the shopping list should update the 'ingredient' database such that 'Shopping List' field is true
       - Suggesting I intend to make something or cook something should be treated as a 'recipe' 
       - Suggesting something is a 'task' will proceed to extract its start date and deadline (where applicable)
-      - Saying 'I should read more about nihilism' will create an entry on the 'recommendations' DB with "nihilism" as the title
+      - Saying 'I should read more about nihilism' will create an entry on the 'recommendation' DB with 'nihilism' as the title
       - Any ambiguity should default to 'note'
-      Return only the classification with NO other text and without quotes.
+      Return only the classification, in the singular, with NO other text and without quotes.
     PROMPT
 
     response = @client.chat(
