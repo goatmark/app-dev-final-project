@@ -11,7 +11,7 @@ class NotionService
     ingredients: ENV.fetch("INGREDIENTS_DB_KEY"),
     recipes: ENV.fetch("RECIPES_DB_KEY"),
     recommendations: ENV.fetch("RECOMMENDATIONS_DB_KEY"),
-    ideas: ENV.fetch("IDEAS_DB_KEY")
+    ideas: ENV.fetch("IDEAS_DB_KEY"),
     wordle_games: ENV.fetch("WORDLE_GAMES_DB_KEY")
   }.freeze
 
