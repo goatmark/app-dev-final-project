@@ -220,8 +220,9 @@ class NotionService
   # General method to find a page by title
   def find_page_by_title(database_key, title)
     Rails.logger.debug "Find Page by Title Method"
-
+    Rails.logger.debug "DB Key: #{database_key}, Title: #{title}"
     database_id = DATABASES[database_key]
+    Rails.logger.debug "DB ID: #{database_id}"
     title_property_name = TITLE_PROPERTIES[database_key] || 'Name' # Use the correct title property
     Rails.logger.debug "Title Property Name: #{title_property_name}"
     filter = {
@@ -273,6 +274,8 @@ class NotionService
   def update_items(database_key, items, update_values = {}, allow_creation: true)
     items.each do |item|
       name = item['name']
+      Rails.logger.debug "#{item['name']}"
+      Rails.logger.debug "#{database_key}"
 
       page_id, match_type = find_or_create_entity(name: name, database_key: database_key, allow_creation: allow_creation)
 

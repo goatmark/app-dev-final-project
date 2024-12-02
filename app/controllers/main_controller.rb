@@ -186,9 +186,9 @@ class MainController < ApplicationController
     related_entities.each do |entity|
       page_id, match_type = notion_service.find_or_create_entity(
         name: entity['name'],
-        database_key: entity['type'].to_sym
+        database_key: entity['type'].pluralize.to_sym
       )
-      relation_name = case entity['type']
+      relation_name = case entity['type'].pluralize
                       when 'people' then 'People'
                       when 'companies' then 'Company'
                       when 'classes' then 'Class'
@@ -260,16 +260,24 @@ class MainController < ApplicationController
       'Status' => { type: 'status', value: 'Next' }
     }
 
+    Rails.logger.debug "Task: #{task}, due #{deadline}, starting #{action_date}, related to #{related_entities}."
     # Process related entities to construct relations
     related_entities.each do |entity|
+      Rails.logger.debug "Entity: #{entity['name']}, #{entity['type'].to_sym}."
+      adjusted_entity_type =  case entity['type']
+                                when 'person' then 'people'
+                                when 'class' then 'classes'
+                                when 'company' then 'companies'
+                                else entity['type']
+                              end 
       page_id, match_type = notion_service.find_or_create_entity(
         name: entity['name'],
-        database_key: entity['type'].to_sym
+        database_key: adjusted_entity_type.to_sym
       )
       relation_name = case entity['type']
-                      when 'people' then 'People'
-                      when 'companies' then 'Company'
-                      when 'classes' then 'Class'
+                      when 'person', 'people' then 'People'
+                      when 'company', 'companies' then 'Company'
+                      when 'class', 'classes' then 'Class'
                       else nil
                       end
       next unless relation_name
