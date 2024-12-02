@@ -145,8 +145,8 @@ class NotionService
     raise
   end
 
-  # Helper method to find or create an entity
-  def find_or_create_entity(name:, database_key:)
+  # Modified method to include indirect matching and control over page creation
+  def find_or_create_entity(name:, database_key:, allow_creation: true)
     Rails.logger.debug "find_or_create_entity() method"
     Rails.logger.debug "Name: #{name}"
     Rails.logger.debug "DB Key: #{database_key}"
@@ -158,26 +158,67 @@ class NotionService
     else
       Rails.logger.debug "No page found for title '#{name}' in database '#{database_key}'."
       titles = get_all_titles_from_database(database_key)
-      best_match = find_best_match(search_term: name, options: titles)
-      if best_match && best_match != "No match"
+
+      # Try indirect match with RegEx
+      best_match = indirect_match_with_regex(search_term: name, options: titles)
+      if best_match
         matched_page = find_page_by_title(database_key, best_match)
         return [matched_page['id'], 'indirect'] if matched_page
       end
-      title_property_name = TITLE_PROPERTIES[database_key] || 'Name'
-      properties = construct_property(title_property_name, 'title', name)
-      payload = {
-        parent: { database_id: DATABASES[database_key] },
-        properties: properties
-      }
-      response = create_page(payload)
-      [response['id'], 'created']
+
+      # If high confidence match not found, try with OpenAI (if allowed)
+      if allow_creation
+        best_match = find_best_match(search_term: name, options: titles)
+        if best_match && best_match != "No match"
+          matched_page = find_page_by_title(database_key, best_match)
+          return [matched_page['id'], 'openai'] if matched_page
+        end
+
+        # If still no match, create a new page
+        title_property_name = TITLE_PROPERTIES[database_key] || 'Name'
+        properties = construct_property(title_property_name, 'title', name)
+        payload = {
+          parent: { database_id: DATABASES[database_key] },
+          properties: properties
+        }
+        response = create_page(payload)
+        [response['id'], 'created']
+      else
+        # Do not create new page, return nil
+        Rails.logger.warn "No match found and allow_creation is false. Skipping creation."
+        return [nil, 'no_match']
+      end
     end
+  end
+
+  # Helper method for indirect matching using RegEx
+  def indirect_match_with_regex(search_term:, options:)
+    search_terms = search_term.downcase.split(/\s+/)
+    best_match = nil
+    highest_score = 0
+    options.each do |option|
+      option_terms = option.downcase.split(/\s+/)
+      common_terms = search_terms & option_terms
+      score = common_terms.size
+      if score > highest_score
+        highest_score = score
+        best_match = option
+      end
+    end
+    return best_match if highest_score > 0
+    nil
+  end
+
+  # Helper method to find the best match using OpenAI
+  def find_best_match(search_term:, options:)
+    openai_service = OpenaiService.new
+    openai_service.find_best_match(search_term: search_term, options: options)
   end
 
   # General method to find a page by title
   def find_page_by_title(database_key, title)
     Rails.logger.debug "Find Page by Title Method"
-    
+
     database_id = DATABASES[database_key]
     title_property_name = TITLE_PROPERTIES[database_key] || 'Name' # Use the correct title property
     Rails.logger.debug "Title Property Name: #{title_property_name}"
@@ -216,7 +257,7 @@ class NotionService
 
       response = @client.database_query(**params)
       response['results'].each do |page|
-        title = get_property_value(page: page, property_name: 'Name')
+        title = get_property_value(page: page, property_name: title_property_name)
         titles << title if title
       end
       start_cursor = response['next_cursor']
@@ -226,18 +267,12 @@ class NotionService
     titles
   end
 
-  # Helper method to find the best match using OpenAI
-  def find_best_match(search_term:, options:)
-    openai_service = OpenaiService.new
-    openai_service.find_best_match(search_term: search_term, options: options)
-  end
-
   # General method to update items (e.g., ingredients, recipes)
-  def update_items(database_key, items, update_values = {})
+  def update_items(database_key, items, update_values = {}, allow_creation: true)
     items.each do |item|
       name = item['name']
 
-      page_id, match_type = find_or_create_entity(name: name, database_key: database_key)
+      page_id, match_type = find_or_create_entity(name: name, database_key: database_key, allow_creation: allow_creation)
 
       if page_id
         page = @client.page(page_id: page_id)

@@ -373,7 +373,8 @@ class MainController < ApplicationController
 
     Rails.logger.debug "update_values lambda defined: #{update_values}"
 
-    notion_service.update_items(:ingredients, ingredients, update_values)
+    # Pass allow_creation: false to prevent page creation
+    notion_service.update_items(:ingredients, ingredients, update_values, allow_creation: false)
   end
 
   def process_recipe_transcription(openai_service, notion_service, note)

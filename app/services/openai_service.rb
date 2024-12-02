@@ -277,6 +277,7 @@ class OpenaiService
       - Return the results in JSON format as an array of objects with "name" and "quantity" keys.
       - If no quantity is specified, default the quantity to 1.
       - Quantities should be integers.
+      - Do NOT include any measurement or container units. As an example, never return a "name" of 'Jar of Cumin'; ignore 'jar' and only ever return a name of 'Cumin' in this example.
       - Do not include any code block markers or additional text.
 
       Example:
