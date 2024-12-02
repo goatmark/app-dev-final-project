@@ -280,6 +280,11 @@ class OpenaiService
       - Do NOT include any measurement or container units. As an example, never return a "name" of 'Jar of Cumin'; ignore 'jar' and only ever return a name of 'Cumin' in this example.
       - Do not include any code block markers or additional text.
 
+      Key preferences / associations (in all cases unless specified otherwise):
+      - Assume 'Onions' refers to 'Yellow Onion'
+      - Assume 'Wine' refers to 'Red Wine'
+      - Assume 'Garlic' refers to 'Garlic Cloves' unless a whole unit is specified, in which case name should be 'Garlic Bulb'
+
       Example:
       [
         {"name": "Onions", "quantity": 1},
