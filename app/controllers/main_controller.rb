@@ -133,11 +133,11 @@ class MainController < ApplicationController
     @todays_date = Date.today.strftime("%Y-%m-%d")
     Rails.logger.debug "Today's date: #{@todays_date}."
     @result = openai_service.classify_message(message: transcription)
-
+  
     Rails.logger.debug "Result: #{@result}."
-
+  
     notion_service = NotionService.new
-
+  
     Rails.logger.debug "Parsing result: #{@result}"
     case @result
     when "note"
@@ -153,20 +153,23 @@ class MainController < ApplicationController
     when "recipe"
       process_recipe_transcription(openai_service, notion_service, transcription)
     when "wordle"
+      process_wordle_transcription(openai_service, notion_service, transcription)
     when "restaurant"
+      process_restaurant_transcription(openai_service, notion_service, transcription)
     when "idea"
+      process_idea_transcription(openai_service, notion_service, transcription)
     else
       Rails.logger.error "Could not classify the transcription."
       return { success: false, error: 'Could not classify the transcription.' }
     end
-
+  
     action_log = notion_service.action_log
     Rails.logger.debug "Action log updated."
     return { success: true, action_log: action_log }
   rescue => e
     Rails.logger.error "Processing transcription failed: #{e.message}"
     return { success: false, error: 'An error occurred during processing.' }
-  end
+  end  
 
   def process_note_transcription(openai_service, notion_service, note)
     body = openai_service.extract_note_body(message: note)
@@ -223,12 +226,13 @@ class MainController < ApplicationController
       }
     ]
 
+    Rails.logger.debug "This is what functioning notes properties parameters look like: #{properties}"
     payload = {
       parent: { database_id: NotionService::DATABASES[:notes] },
       properties: properties,
       children: children
     }
-
+    Rails.logger.debug "Final payload: \n#{payload}"
     response = notion_service.create_page(payload)
     page_id = response['id']
 
@@ -390,11 +394,199 @@ class MainController < ApplicationController
 
   def process_recipe_transcription(openai_service, notion_service, note)
     recipes = openai_service.extract_recipes(message: note) || []
+    Rails.logger.debug("#{note}: , #{recipes}")
 
     update_values = lambda do |_page, _item|
       { 'Planned' => { type: 'checkbox', value: true } }
     end
 
+    Rails.logger.debug("Update Values hash: #{update_values}")
+
     notion_service.update_items(:recipes, recipes, update_values)
   end
+
+  def process_wordle_transcription(openai_service, notion_service, note)
+    scores = openai_service.extract_wordle_scores(message: note)
+    Rails.logger.debug "Extracted scores: #{scores}"
+  
+    if scores['Mark'].nil? || scores['Lorna'].nil?
+      Rails.logger.error "Could not extract scores for both Mark and Lorna."
+      return
+    end
+  
+    recording = Recording.create(
+      body: note,
+      summary: "Wordle scores updated",
+      recording_type: 'wordle',
+      status: 'complete'
+    )
+  
+    database_id = NotionService::DATABASES[:wordle_games]
+    today_date = Date.today.strftime('%Y-%m-%d')
+    filter = {
+      property: 'Date',
+      date: { equals: today_date }
+    }
+  
+    Rails.logger.debug "Searching for Wordle game on date: #{today_date}"
+  
+    response = notion_service.client.database_query(
+      database_id: database_id,
+      filter: filter
+    )
+  
+    if response && response['results'] && !response['results'].empty?
+      page = response['results'].first
+      page_id = page['id']
+      Rails.logger.debug "Found Wordle game page: #{page_id}"
+  
+      properties = notion_service.construct_properties(
+        {
+          "Mark's Score" => { type: 'number', value: scores['Mark'].to_i },
+          "Lorna's Score" => { type: 'number', value: scores['Lorna'].to_i }
+        }
+      )
+  
+      notion_service.update_page(page_id, properties: properties)
+  
+      Activity.create(
+        recording_id: recording.id,
+        page_id: page_id,
+        page_url: notion_service.construct_notion_url(page_id),
+        action: 'updated',
+        database_id: database_id,
+        database_name: 'wordle_games',
+        status: 'completed'
+      )
+  
+      notion_service.action_log << { message: "Updated Wordle scores for #{today_date}", url: notion_service.construct_notion_url(page_id) }
+    else
+      Rails.logger.error "No Wordle game found for date #{today_date}"
+      notion_service.action_log << { message: "No Wordle game found for date #{today_date}", url: nil }
+    end
+  end
+
+  def process_restaurant_transcription(openai_service, notion_service, note)
+    info = openai_service.extract_restaurant_info(message: note)
+    Rails.logger.debug "Extracted restaurant info: #{info}"
+  
+    restaurant_name = info['restaurant_name']
+    recommender_name = info['recommender_name'] || 'Mark'
+  
+    page_id, _ = notion_service.find_or_create_entity(
+      name: restaurant_name,
+      database_key: :restaurants,
+      allow_creation: true
+    )
+  
+    if page_id.nil?
+      Rails.logger.error "Failed to find or create restaurant: #{restaurant_name}"
+      return
+    end
+  
+    recommender_page_id, _ = notion_service.find_or_create_entity(
+      name: recommender_name,
+      database_key: :people,
+      allow_creation: true
+    )
+  
+    page = notion_service.client.page(page_id: page_id)
+    existing_recommenders = notion_service.get_property_value(page: page, property_name: 'Recommenders') || []
+  
+    recommenders = existing_recommenders + [recommender_page_id]
+    recommenders.uniq!
+  
+    properties = notion_service.construct_properties(
+      {
+        'Recommenders' => { type: 'relation', value: recommenders }
+      }
+    )
+  
+    notion_service.update_page(page_id, properties: properties)
+  
+    recording = Recording.create(
+      body: note,
+      summary: "Restaurant recommendation: #{restaurant_name}",
+      recording_type: 'restaurant',
+      status: 'complete'
+    )
+  
+    Activity.create(
+      recording_id: recording.id,
+      page_id: page_id,
+      page_url: notion_service.construct_notion_url(page_id),
+      action: 'updated',
+      database_id: NotionService::DATABASES[:restaurants],
+      database_name: 'restaurants',
+      status: 'completed'
+    )
+  
+    notion_service.action_log << { message: "Processed restaurant recommendation for '#{restaurant_name}'", url: notion_service.construct_notion_url(page_id) }
+  end
+
+  def process_idea_transcription(openai_service, notion_service, note)
+    idea = openai_service.extract_idea_title_and_body(message: note)
+    Rails.logger.debug "Extracted idea: #{idea}"
+  
+    title = idea['title']
+    body = idea['body']
+  
+    properties_hash = {
+      'Name' => { type: 'title', value: title }
+    }
+
+    Rails.logger.debug "#{title}: #{body}"
+
+    Rails.logger.debug "Properties_hash:\n#{properties_hash}}"
+
+    properties = notion_service.construct_properties(properties_hash)
+
+    Rails.logger.debug "Properties:\n#{properties_hash}}"
+    children = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'text',
+              text: {
+                'content' => body
+              }
+            }
+          ]
+        }
+      }
+    ]
+  
+    payload = {
+      parent: { database_id: NotionService::DATABASES[:ideas] },
+      properties: properties,
+      children: children
+    }
+    Rails.logger.debug "Final payload: \n#{payload}"
+    response = notion_service.create_page(payload)
+    Rails.logger.debug "Response: #{response}"
+    page_id = response['id']
+    Rails.logger.debug "Page ID: #{page_id}"
+  
+    recording = Recording.create(
+      body: note,
+      summary: title,
+      recording_type: 'idea',
+      status: 'complete'
+    )
+  
+    Activity.create(
+      recording_id: recording.id,
+      page_id: page_id,
+      page_url: notion_service.construct_notion_url(page_id),
+      action: 'created',
+      database_id: NotionService::DATABASES[:ideas],
+      database_name: 'ideas',
+      status: 'completed'
+    )
+  
+    notion_service.action_log << { message: "Added new idea '#{title}'", url: notion_service.construct_notion_url(page_id) }
+  end  
 end

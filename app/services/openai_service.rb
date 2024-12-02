@@ -50,23 +50,24 @@ class OpenaiService
       - recipe
       - recommendation
       - task
-      Each of these classifiers will lead to a set of appropriate events. Key examples:
-      - Suggesting items should be added to the shopping list should update the 'ingredient' database such that 'Shopping List' field is true
-      - Suggesting I intend to make something or cook something should be treated as a 'recipe' 
-      - Suggesting something is a 'task' will proceed to extract its start date and deadline (where applicable)
-      - Saying 'I should read more about nihilism' will create an entry on the 'recommendation' DB with 'nihilism' as the title
-      - Any ambiguity should default to 'note'
-      Return only the classification, in the singular, with NO other text and without quotes.
+      - wordle
+      - restaurant
+    Each of these classifiers will lead to a set of appropriate events. Key examples:
+      - Suggesting items to add to the shopping list should update the 'ingredient' database such that the 'Shopping List' field is true.
+      - Suggesting an intention to make or cook something should be treated as a 'recipe'.
+      - Mentioning scores or games played in Wordle should be classified as 'wordle'. A message like '2-3 Mark' or 'My girlfriend beat me today 3-4', or even just '5-5' falls into the 'wordle' category. 
+      - Recommending or mentioning a restaurant should be classified as 'restaurant'.
+      - Suggesting something is a 'task' will proceed to extract its start date and deadline (where applicable).
+      - Saying 'I should read more about nihilism' will create an entry in the 'recommendation' DB with 'nihilism' as the title.
+      - Any ambiguity should default to 'note'.
+    Return only the classification, in the singular, with NO other text and without quotes.
     PROMPT
-
+  
     response = @client.chat(
       parameters: {
         model: "gpt-4o-mini",
         messages: [
-          {
-            role: "system",
-            content: prompt
-          },
+          { role: "system", content: prompt },
           { role: "user", content: message }
         ],
         temperature: 0
@@ -377,6 +378,132 @@ class OpenaiService
       puts "JSON Parsing Error: #{e.message}"
       puts "Response was: #{@last_api_response}"
       return []
+    end
+  end
+
+  def extract_wordle_scores(message:)
+    prompt = <<~PROMPT
+      From the following message, extract the Wordle scores for 'Mark' and 'Lorna'.
+      - Wordle is a game where a lower score is better. Be VERY careful how you interpret scores for each person as the user may make mistakes:
+        - If speaker says "I beat Lorna 4-3 today," the winner is the one with the lower score (Mark won, so his score is 3).
+        - If speaker says "I beat Lorna by 2 points, with a score of 4" that means Mark scored 4 and Lorna scored 6 points.
+        - If speaker says "2-3 Lorna", it means Lorna won Wordle with a score of 2 and Mark lost with a score of 3.
+      - The message may state who beat whom, or that there was a tie.
+      - Return the results in JSON format as an object with keys 'Mark' and 'Lorna', and their respective scores as integers.
+      - Do not include any code block markers or additional text.
+      - In the absence of any other clues, the first-person speaker is 'Mark' and his opponent (girlfriend) is 'Lorna'
+  
+      Examples:
+      Message: "Lorna beat me 3-4"
+      Output:
+      {"Mark": 4, "Lorna": 3}
+  
+      Message: "We both tied at Wordle with a score of 2"
+      Output:
+      {"Mark": 2, "Lorna": 2}
+  
+      Message: "I beat my girlfriend at Wordle 3-6"
+      Output:
+      {"Mark": 3, "Lorna": 6}
+  
+      Message: "#{message}"
+    PROMPT
+  
+    response = @client.chat(
+      parameters: {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7
+      }
+    )
+  
+    json_str = response.dig("choices", 0, "message", "content").strip
+    json_str = json_str.gsub(/```(?:json)?/, '').strip
+  
+    begin
+      scores = JSON.parse(json_str)
+      return scores
+    rescue JSON::ParserError => e
+      Rails.logger.error "JSON Parsing Error: #{e.message}"
+      Rails.logger.error "Response was: #{json_str}"
+      return {}
+    end
+  end
+
+  def extract_restaurant_info(message:)
+    prompt = <<~PROMPT
+      From the following message, extract the name of the restaurant being recommended and the name of the person who recommended it.
+      - Return the result in JSON format as an object with keys "restaurant_name" and "recommender_name".
+      - If no recommender is specified, you can assume the recommender is 'Mark' (i.e., yourself).
+      - Do not include any code block markers or additional text.
+  
+      Example:
+      Message: "My friend John suggested we try the new Italian place called Luigi's."
+      Output:
+      {"restaurant_name": "Luigi's", "recommender_name": "John"}
+  
+      Message: "I want to check out that sushi place downtown."
+      Output:
+      {"restaurant_name": "That sushi place downtown", "recommender_name": "Mark"}
+  
+      Message: "#{message}"
+    PROMPT
+  
+    response = @client.chat(
+      parameters: {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7
+      }
+    )
+  
+    json_str = response.dig("choices", 0, "message", "content").strip
+    json_str = json_str.gsub(/```(?:json)?/, '').strip
+  
+    begin
+      info = JSON.parse(json_str)
+      return info
+    rescue JSON::ParserError => e
+      Rails.logger.error "JSON Parsing Error: #{e.message}"
+      Rails.logger.error "Response was: #{json_str}"
+      return {}
+    end
+  end
+
+  def extract_idea_title_and_body(message:)
+    prompt = <<~PROMPT
+      From the following message, extract the idea''s title and body.
+      - The title should be a concise summary of the idea.
+      - The body should be the full description of the idea.
+      - Return the result in JSON format with keys "title" and "body".
+      - Do not include any code block markers or additional text.
+  
+      Example:
+      Message: "I just thought of a new app that helps people find parking spots in crowded cities."
+      Output:
+      {"title": "Parking Spot Finder App", "body": "I just thought of a new app that helps people find parking spots in crowded cities."}
+  
+      Message: "#{message}"
+    PROMPT
+  
+    response = @client.chat(
+      parameters: {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7
+      }
+    )
+  
+    json_str = response.dig("choices", 0, "message", "content").strip
+    json_str = json_str.gsub(/```(?:json)?/, '').strip
+  
+    begin
+      idea = JSON.parse(json_str)
+      return idea
+    rescue JSON::ParserError => e
+      Rails.logger.error "JSON Parsing Error: #{e.message}"
+      Rails.logger.error "Response was: #{json_str}"
+      return {}
     end
   end
 end

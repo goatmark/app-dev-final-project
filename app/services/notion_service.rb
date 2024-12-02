@@ -1,5 +1,5 @@
 class NotionService
-  attr_reader :action_log
+  attr_reader :action_log, :client
 
   # Database IDs
   DATABASES = {
