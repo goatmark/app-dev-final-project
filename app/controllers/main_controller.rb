@@ -133,14 +133,19 @@ class MainController < ApplicationController
     Rails.logger.debug "Starting process_transcription."
     openai_service = OpenaiService.new
     @todays_date = Date.today.strftime("%Y-%m-%d")
-    @result = openai_service.classify_message(message: @note)
+    Rails.logger.debug "Today's date: #{@todays_date}."
+    @result = openai_service.classify_message(message: transcription)
+
+    Rails.logger.debug "Result: #{@result}."
 
     notion_service = NotionService.new
 
     Rails.logger.debug "Parsing result: #{@result}"
     case @result
     when "note"
+      Rails.logger.debug "Note transcription beginning."
       process_note_transcription(openai_service, notion_service, transcription)
+      Rails.logger.debug "Note transcription successful."
     when "task"
       process_task_transcription(openai_service, notion_service, transcription)
     when "recommendation"
@@ -154,8 +159,9 @@ class MainController < ApplicationController
       return { success: false, error: 'Could not classify the transcription.' }
     end
 
+    Rails.logger.debug "Updating action log."
     action_log = notion_service.action_log
-    Rails.logger.debug "Item processing complete."
+    Rails.logger.debug "Action log updated."
     return { success: true, action_log: action_log }
   rescue => e
     Rails.logger.error "Processing transcription failed: #{e.message}"
@@ -164,19 +170,22 @@ class MainController < ApplicationController
   
   def process_note_transcription(openai_service, notion_service, note)
 
-    @body = openai_service.extract_note_body(message: note)
-    @title = openai_service.extract_note_title(message: note)
-    @related_entities = openai_service.extract_related_entities(message: @note) || []
+    body = openai_service.extract_note_body(message: note)
+    Rails.logger.debug "Body: #{body}"
+    title = openai_service.extract_note_title(message: note)
+    Rails.logger.debug "Title: #{title}"
+    related_entities = openai_service.extract_related_entities(message: note) || []
+    Rails.logger.debug "Related Entities: #{related_entities}"
 
     recording = Recording.new
-    recording.body = transcription
-    recording.summary = @title
+    recording.body = note
+    recording.summary = title
     recording.recording_type = 'note'
     recording.status = 'complete'
     recording.save
 
     input_values = {
-      title: @title,
+      title: title,
       date: Date.today.strftime('%Y-%m-%d')
     }
 
@@ -191,7 +200,7 @@ class MainController < ApplicationController
             {
               type: 'text',
               text: {
-                'content' => @body
+                'content' => body
               }
             }
           ]
@@ -199,7 +208,7 @@ class MainController < ApplicationController
       }
     ]
 
-    notion_service.create_page(
+    page_id = notion_service.create_page(
       database_key: :notes,
       input_values: input_values,
       relations: relations_hash,
@@ -208,7 +217,15 @@ class MainController < ApplicationController
 
     activity = Activity.new
     activity.recording_id = recording.id
-    activity.page_id = 
+    activity.page_id = page_id
+    activity.action = 'created'
+    activity.action_type = 'created'
+    activity.database_id = ENV.fetch("NOTES_DB_KEY")
+    activity.database_name = 'notes'
+    activity.payload = input_values
+    activity.status = 'completed'
+    activity.new
+
   end
 
   def process_task_transcription(openai_service, notion_service, note)
@@ -275,7 +292,7 @@ class MainController < ApplicationController
     notion_service.update_items(:recipes, @recipes, update_values)
   end
 
-  def process_entities(openai_service, notion_service, database_key)
+  def process_entities(notion_service, database_key)
     relations_hash = {}
     @related_entities.each do |entity|
       relation_field = get_relation_field_for_entity_type(entity['type'], database_key)

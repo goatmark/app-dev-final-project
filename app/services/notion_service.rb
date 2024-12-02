@@ -114,8 +114,8 @@ class NotionService
     page_url = construct_notion_url(page_id)
     page_title = get_page_title(page_id)
 
-    @action_log << { message: "Created #{database_key.to_s.capitalize}: '#{page_title}'", url: page_url }
-    response
+    @action_log << { message: "Created #{database_key.to_s.capitalize}: '#{page_title}'", id: page_id, title: page_title, url: page_url }
+    return(page_id)
   rescue Notion::Api::Errors::NotionError => e
     @action_log << "Error creating page in database #{database_key}: #{e.message}"
     Rails.logger.error "Notion API Error: #{e.message}"
