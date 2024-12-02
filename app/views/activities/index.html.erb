@@ -1,0 +1,166 @@
+<div>
+  <div>
+    <h1>
+      List of all activities
+    </h1>
+  </div>
+</div>
+
+<hr>
+
+<div>
+  <div>
+    <h2>
+      Add a new activity
+    </h2>
+
+    <form action="/insert_activity" method="post">
+      <div>
+        <label for="action_type_box">
+          Action type
+        </label>
+
+        <input type="text" id="action_type_box" name="query_action_type">
+      </div>
+
+      <div>
+        <label for="recording_id_box">
+          Recording
+        </label>
+
+        <input type="text" id="recording_id_box" name="query_recording_id">
+      </div>
+
+      <div>
+        <label for="page_id_box">
+          Page
+        </label>
+
+        <input type="text" id="page_id_box" name="query_page_id">
+      </div>
+
+      <div>
+        <label for="database_id_box">
+          Database
+        </label>
+
+        <input type="text" id="database_id_box" name="query_database_id">
+      </div>
+
+      <div>
+        <label for="action_box">
+          Action
+        </label>
+
+        <input type="text" id="action_box" name="query_action">
+      </div>
+
+      <div>
+        <label for="page_url_box">
+          Page url
+        </label>
+
+        <input type="text" id="page_url_box" name="query_page_url">
+      </div>
+
+      <button>
+        Create activity
+      </button>
+    </form>
+  </div>
+</div>
+
+<hr>
+<div>
+  <div>
+    <table border="1">
+      <tr>
+        <th>
+          ID
+        </th>
+
+        <th>
+          Action type
+        </th>
+
+        <th>
+          Recording
+        </th>
+
+        <th>
+          Page
+        </th>
+
+        <th>
+          Database
+        </th>
+
+        <th>
+          Action
+        </th>
+
+        <th>
+          Page url
+        </th>
+
+        <th>
+          Created at
+        </th>
+
+        <th>
+          Updated at
+        </th>
+
+        <th>
+        </th>
+      </tr>
+
+      <% @list_of_activities.each do |an_activity| %>
+      <tr>
+        <td>
+          <%= an_activity.id %>
+        </td>
+
+        <td>
+          <%= an_activity.action_type %>
+        </td>
+
+        <td>
+          <%= an_activity.recording_id %>
+        </td>
+
+        <td>
+          <%= an_activity.page_id %>
+        </td>
+
+        <td>
+          <%= an_activity.database_id %>
+        </td>
+
+        <td>
+          <%= an_activity.action %>
+        </td>
+
+        <td>
+          <%= an_activity.page_url %>
+        </td>
+
+        <td>
+          <%= time_ago_in_words(an_activity.created_at) %> ago
+        </td>
+        <td>
+          <%= time_ago_in_words(an_activity.updated_at) %> ago
+        </td>
+
+        <td>
+          <a href="/activities/<%= an_activity.id %>">
+            Show details
+          </a>
+        </td>
+      </tr>
+      <% end %>
+    </table>
+  </div>
+</div>
+
+<hr>

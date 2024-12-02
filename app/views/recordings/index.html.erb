@@ -1,0 +1,134 @@
+<div>
+  <div>
+    <h1>
+      List of all recordings
+    </h1>
+  </div>
+</div>
+
+<hr>
+
+<div>
+  <div>
+    <h2>
+      Add a new recording
+    </h2>
+
+    <form action="/insert_recording" method="post">
+      <div>
+        <label for="recording_type_box">
+          Recording type
+        </label>
+
+        <input type="text" id="recording_type_box" name="query_recording_type">
+      </div>
+
+      <div>
+        <label for="body_box">
+          Body
+        </label>
+
+        <textarea id="body_box" name="query_body" rows="3"></textarea>
+      </div>
+
+      <div>
+        <label for="summary_box">
+          Summary
+        </label>
+
+        <textarea id="summary_box" name="query_summary" rows="3"></textarea>
+      </div>
+
+      <div>
+        <label for="activities_count_box">
+          Activities count
+        </label>
+
+        <input type="text" id="activities_count_box" name="query_activities_count">
+      </div>
+
+      <button>
+        Create recording
+      </button>
+    </form>
+  </div>
+</div>
+
+<hr>
+<div>
+  <div>
+    <table border="1">
+      <tr>
+        <th>
+          ID
+        </th>
+
+        <th>
+          Recording type
+        </th>
+
+        <th>
+          Body
+        </th>
+
+        <th>
+          Summary
+        </th>
+
+        <th>
+          Activities count
+        </th>
+
+        <th>
+          Created at
+        </th>
+
+        <th>
+          Updated at
+        </th>
+
+        <th>
+        </th>
+      </tr>
+
+      <% @list_of_recordings.each do |a_recording| %>
+      <tr>
+        <td>
+          <%= a_recording.id %>
+        </td>
+
+        <td>
+          <%= a_recording.recording_type %>
+        </td>
+
+        <td>
+          <%= a_recording.body %>
+        </td>
+
+        <td>
+          <%= a_recording.summary %>
+        </td>
+
+        <td>
+          <%= a_recording.activities_count %>
+        </td>
+
+        <td>
+          <%= time_ago_in_words(a_recording.created_at) %> ago
+        </td>
+        <td>
+          <%= time_ago_in_words(a_recording.updated_at) %> ago
+        </td>
+
+        <td>
+          <a href="/recordings/<%= a_recording.id %>">
+            Show details
+          </a>
+        </td>
+      </tr>
+      <% end %>
+    </table>
+  </div>
+</div>
+
+<hr>

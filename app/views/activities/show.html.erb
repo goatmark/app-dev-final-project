@@ -1,0 +1,146 @@
+<div>
+  <div>
+    <h1>
+      Activity #<%= @the_activity.id %> details
+    </h1>
+
+    <div>
+      <div>
+        <a href="/activities">
+          Go back
+        </a>
+      </div>
+
+      <div>
+        <a href="/delete_activity/<%= @the_activity.id %>">
+          Delete activity
+        </a>
+      </div>
+    </div>
+
+    <dl>
+      <dt>
+        Action type
+      </dt>
+      <dd>
+        <%= @the_activity.action_type %>
+      </dd>
+
+      <dt>
+        Recording
+      </dt>
+      <dd>
+        <%= @the_activity.recording_id %>
+      </dd>
+
+      <dt>
+        Page
+      </dt>
+      <dd>
+        <%= @the_activity.page_id %>
+      </dd>
+
+      <dt>
+        Database
+      </dt>
+      <dd>
+        <%= @the_activity.database_id %>
+      </dd>
+
+      <dt>
+        Action
+      </dt>
+      <dd>
+        <%= @the_activity.action %>
+      </dd>
+
+      <dt>
+        Page url
+      </dt>
+      <dd>
+        <%= @the_activity.page_url %>
+      </dd>
+
+      <dt>
+        Created at
+      </dt>
+      <dd>
+        <%= time_ago_in_words(@the_activity.created_at) %> ago
+      </dd>
+
+      <dt>
+        Updated at
+      </dt>
+      <dd>
+        <%= time_ago_in_words(@the_activity.updated_at) %> ago
+      </dd>
+    </dl>
+  </div>
+</div>
+
+<hr>
+
+
+<div>
+  <div>
+    <h2>
+      Edit activity
+    </h2>
+
+    <form action="/modify_activity/<%= @the_activity.id %>"  method="post" >
+      <div>
+        <label for="action_type_box">
+          Action type
+        </label>
+
+        <input type="text" id="action_type_box" name="query_action_type" value="<%= @the_activity.action_type %>">
+      </div>
+
+      <div>
+        <label for="recording_id_box">
+          Recording
+        </label>
+
+        <input type="text" id="recording_id_box" name="query_recording_id" value="<%= @the_activity.recording_id %>">
+      </div>
+
+      <div>
+        <label for="page_id_box">
+          Page
+        </label>
+
+        <input type="text" id="page_id_box" name="query_page_id" value="<%= @the_activity.page_id %>">
+      </div>
+
+      <div>
+        <label for="database_id_box">
+          Database
+        </label>
+
+        <input type="text" id="database_id_box" name="query_database_id" value="<%= @the_activity.database_id %>">
+      </div>
+
+      <div>
+        <label for="action_box">
+          Action
+        </label>
+
+        <input type="text" id="action_box" name="query_action" value="<%= @the_activity.action %>">
+      </div>
+
+      <div>
+        <label for="page_url_box">
+          Page url
+        </label>
+
+        <input type="text" id="page_url_box" name="query_page_url" value="<%= @the_activity.page_url %>">
+      </div>
+
+      <button>
+        Update activity
+      </button>
+    </form>
+  </div>
+</div>
+
+<hr>
