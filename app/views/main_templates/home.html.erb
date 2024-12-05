@@ -98,7 +98,7 @@
                   <td><%= activity.created_at.strftime("%Y-%m-%d %H:%M:%S") %></td>
                   <td><%= activity.recording.body %>
                   <td><%= activity.action.capitalize %></td>
-                  <td><%= activity.database_name.capitalize %></td>
+                  <td><%= activity.database_name %></td>
                   <td><a href="<%= activity.page_url %>" target="_blank">Open in Notion</a></td>
                 </tr>
               <% end %>
