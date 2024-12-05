@@ -276,8 +276,8 @@ class NotionService
   def update_items(database_key, items, update_values = {}, allow_creation: true)
     items.each do |item|
       name = item['name']
-      Rails.logger.debug "#{item['name']}"
-      Rails.logger.debug "#{database_key}"
+      Rails.logger.debug "Item: #{item['name']}"
+      Rails.logger.debug "DB Key: #{database_key}"
 
       page_id, match_type = find_or_create_entity(name: name, database_key: database_key, allow_creation: allow_creation)
 
