@@ -32,7 +32,7 @@ class NotionService
   }.freeze
 
   # Base URL for Notion pages
-  NOTION_BASE_URL = ENV.fetch("NOTION_BASE_URL", "https://www.notion.so/")
+  NOTION_BASE_URL = "https://www.notion.so/"
 
   def initialize
     @client = Notion::Client.new
@@ -156,7 +156,7 @@ class NotionService
     cursor = nil
     loop do
       begin
-        response = client.blocks_children_list(
+        response = @client.blocks_children_list(
           block_id: page_id,
           start_cursor: cursor,
           page_size: 100
@@ -264,7 +264,7 @@ class NotionService
     notes = []
     cursor = nil
     loop do
-      response = client.database_query(
+      response = @client.database_query(
         database_id: DATABASES[:notes],
         filter: filter,
         start_cursor: cursor,
