@@ -5,6 +5,7 @@
 #  id               :bigint           not null, primary key
 #  activities_count :integer
 #  body             :text
+#  proposed_actions :text
 #  recording_type   :string
 #  status           :string
 #  summary          :text

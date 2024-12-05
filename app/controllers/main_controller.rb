@@ -1,14 +1,29 @@
 require 'streamio-ffmpeg'
 
 class MainController < ApplicationController
-  protect_from_forgery except: [:upload_audio, :confirm_transcription, :fetch_events, :fetch_action_logs]
+  protect_from_forgery except: [:upload_audio, :confirm_transcription, :fetch_events]
 
   def main
-    @action_log = flash[:action_log] || []
+    @activities = Activity.order(created_at: :desc).limit(10)
     @events = flash[:events] || []
     @transcription = flash[:transcription] || ""
     @skip_confirmation = flash[:skip_confirmation] == '1'
     render(template: "main_templates/home")
+  end
+
+  def confirm
+    transcription = params[:transcription]
+    Rails.logger.debug "Processing confirmed transcription: #{transcription}"
+
+    result = process_transcription(transcription)
+    if result[:success]
+      @recording = result[:recording]
+      @activities = Activity.where(recording_id: @recording.id)
+      render template: 'main_templates/processing'
+    else
+      flash[:error] = result[:error]
+      redirect_to root_path
+    end
   end
 
   def upload_audio
@@ -59,9 +74,9 @@ class MainController < ApplicationController
           Rails.logger.debug "process_transcription() method complete."
 
           if result[:success]
-            flash[:action_log] = result[:action_log]
-            flash[:transcription] = transcription
-            render json: { success: true, action_log: result[:action_log], transcription: transcription }, status: :ok
+            @recording = result[:recording]
+            @activities = Activity.where(recording_id: @recording.id)
+            render json: { success: true, message: 'Transcription processed successfully in hardcore mode.' }, status: :ok
           else
             Rails.logger.error "Transcription processing failed: #{result[:error]}"
             render json: { success: false, error: result[:error] }, status: :unprocessable_entity
@@ -95,34 +110,21 @@ class MainController < ApplicationController
 
   def confirm_transcription
     transcription = params[:transcription]
-    hardcore_mode = params[:hardcore_mode] == '1'
-
-    Rails.logger.debug "Received confirm_transcription request. Transcription: #{transcription}, Hardcore Mode: #{hardcore_mode}"
-
-    if hardcore_mode
-      result = process_transcription(transcription)
-      if result[:success]
-        flash[:action_log] = result[:action_log]
-        flash[:transcription] = transcription
-        render json: { success: true, message: 'Transcription processed successfully.' }, status: :ok
-      else
-        render json: { success: false, error: result[:error] }, status: :unprocessable_entity
-      end
+    Rails.logger.debug "Received confirm_transcription request. Transcription: #{transcription}"
+  
+    result = process_transcription(transcription)
+    if result[:success]
+      @recording = result[:recording]
+      @activities = Activity.where(recording_id: @recording.id)
+      render json: { success: true, message: 'Transcription processed successfully.' }, status: :ok
     else
-      flash[:action_log] = ['Transcription confirmed by user.']
-      flash[:transcription] = transcription
-      render json: { success: true, message: 'Transcription confirmed.' }, status: :ok
+      render json: { success: false, error: result[:error] }, status: :unprocessable_entity
     end
   end
 
   def fetch_events
     @events = flash[:events] || []
     render json: { events: @events.map { |event| event[:message] } }, status: :ok
-  end
-
-  def fetch_action_logs
-    @action_log = flash[:action_log] || []
-    render json: { action_logs: @action_log.map { |action| action[:message] } }, status: :ok
   end
 
   private
@@ -133,43 +135,55 @@ class MainController < ApplicationController
     @todays_date = Date.today.strftime("%Y-%m-%d")
     Rails.logger.debug "Today's date: #{@todays_date}."
     @result = openai_service.classify_message(message: transcription)
-  
+
     Rails.logger.debug "Result: #{@result}."
-  
+
     notion_service = NotionService.new
-  
+
     Rails.logger.debug "Parsing result: #{@result}"
     case @result
     when "note"
       Rails.logger.debug "Note transcription beginning."
-      process_note_transcription(openai_service, notion_service, transcription)
+      recording = process_note_transcription(openai_service, notion_service, transcription)
       Rails.logger.debug "Note transcription successful."
     when "task"
-      process_task_transcription(openai_service, notion_service, transcription)
+      recording = process_task_transcription(openai_service, notion_service, transcription)
     when "recommendation"
-      process_recommendation_transcription(openai_service, notion_service, transcription)
+      recording = process_recommendation_transcription(openai_service, notion_service, transcription)
     when "ingredient"
-      process_ingredient_transcription(openai_service, notion_service, transcription)
+      recording = process_ingredient_transcription(openai_service, notion_service, transcription)
     when "recipe"
-      process_recipe_transcription(openai_service, notion_service, transcription)
+      recording = process_recipe_transcription(openai_service, notion_service, transcription)
     when "wordle"
-      process_wordle_transcription(openai_service, notion_service, transcription)
+      recording = process_wordle_transcription(openai_service, notion_service, transcription)
     when "restaurant"
-      process_restaurant_transcription(openai_service, notion_service, transcription)
+      recording = process_restaurant_transcription(openai_service, notion_service, transcription)
     when "idea"
-      process_idea_transcription(openai_service, notion_service, transcription)
+      recording = process_idea_transcription(openai_service, notion_service, transcription)
     else
       Rails.logger.error "Could not classify the transcription."
-      return { success: false, error: 'Could not classify the transcription.' }
+      recording = Recording.create(
+        body: transcription,
+        summary: 'Unclassified Transcription',
+        recording_type: 'unknown',
+        status: 'failed'
+      )
+      return { success: false, error: 'Could not classify the transcription.', recording: recording }
     end
-  
+
     action_log = notion_service.action_log
     Rails.logger.debug "Action log updated."
-    return { success: true, action_log: action_log }
+    return { success: true, action_log: action_log, recording: recording }
   rescue => e
     Rails.logger.error "Processing transcription failed: #{e.message}"
-    return { success: false, error: 'An error occurred during processing.' }
-  end  
+    recording = Recording.create(
+      body: transcription,
+      summary: 'Processing Error',
+      recording_type: 'unknown',
+      status: 'failed'
+    )
+    return { success: false, error: 'An error occurred during processing.', recording: recording }
+  end
 
   def process_note_transcription(openai_service, notion_service, note)
     body = openai_service.extract_note_body(message: note)
@@ -242,9 +256,11 @@ class MainController < ApplicationController
       page_url: notion_service.construct_notion_url(page_id),
       action: 'created',
       database_id: ENV.fetch("NOTES_DB_KEY"),
-      database_name: 'notes',
+      database_name: 'note',
       status: 'completed'
     )
+
+    recording
   end
 
   def process_task_transcription(openai_service, notion_service, note)
@@ -303,9 +319,11 @@ class MainController < ApplicationController
       page_url: notion_service.construct_notion_url(page_id),
       action: 'created',
       database_id: ENV.fetch("TASKS_DB_KEY"),
-      database_name: 'tasks',
+      database_name: 'task',
       status: 'completed'
     )
+
+    recording
   end
 
   def process_recommendation_transcription(openai_service, notion_service, note)
@@ -359,9 +377,11 @@ class MainController < ApplicationController
       page_url: notion_service.construct_notion_url(page_id),
       action: 'created',
       database_id: ENV.fetch("RECOMMENDATIONS_DB_KEY"),
-      database_name: 'recommendations',
+      database_name: 'recommendation',
       status: 'completed'
     )
+
+    recording
   end
 
   def process_ingredient_transcription(openai_service, notion_service, note)
@@ -390,11 +410,20 @@ class MainController < ApplicationController
 
     # Pass allow_creation: false to prevent page creation
     notion_service.update_items(:ingredients, ingredients, update_values, allow_creation: false)
+
+    recording
   end
 
   def process_recipe_transcription(openai_service, notion_service, note)
     recipes = openai_service.extract_recipes(message: note) || []
     Rails.logger.debug("#{note}: , #{recipes}")
+
+    recording = Recording.create(
+      body: note,
+      summary: 'Recipes planned',
+      recording_type: 'recipe',
+      status: 'complete'
+    )
 
     update_values = lambda do |_page, _item|
       { 'Planned' => { type: 'checkbox', value: true } }
@@ -403,134 +432,155 @@ class MainController < ApplicationController
     Rails.logger.debug("Update Values hash: #{update_values}")
 
     notion_service.update_items(:recipes, recipes, update_values)
+
+    recording
   end
 
   def process_wordle_transcription(openai_service, notion_service, note)
     scores = openai_service.extract_wordle_scores(message: note)
     Rails.logger.debug "Extracted scores: #{scores}"
-  
+
     if scores['Mark'].nil? || scores['Lorna'].nil?
       Rails.logger.error "Could not extract scores for both Mark and Lorna."
-      return
+      recording = Recording.create(
+        body: note,
+        summary: 'Wordle scores update failed',
+        recording_type: 'wordle',
+        status: 'failed'
+      )
+      return recording
     end
-  
+
     recording = Recording.create(
       body: note,
       summary: "Wordle scores updated",
       recording_type: 'wordle',
       status: 'complete'
     )
-  
+
     database_id = NotionService::DATABASES[:wordle_games]
     today_date = Date.today.strftime('%Y-%m-%d')
     filter = {
       property: 'Date',
       date: { equals: today_date }
     }
-  
+
     Rails.logger.debug "Searching for Wordle game on date: #{today_date}"
-  
+
     response = notion_service.client.database_query(
       database_id: database_id,
       filter: filter
     )
-  
+
     if response && response['results'] && !response['results'].empty?
       page = response['results'].first
       page_id = page['id']
       Rails.logger.debug "Found Wordle game page: #{page_id}"
-  
+
       properties = notion_service.construct_properties(
         {
           "Mark's Score" => { type: 'number', value: scores['Mark'].to_i },
           "Lorna's Score" => { type: 'number', value: scores['Lorna'].to_i }
         }
       )
-  
+
       notion_service.update_page(page_id, properties: properties)
-  
+
       Activity.create(
         recording_id: recording.id,
         page_id: page_id,
         page_url: notion_service.construct_notion_url(page_id),
         action: 'updated',
         database_id: database_id,
-        database_name: 'wordle_games',
+        database_name: 'wordle',
         status: 'completed'
       )
-  
+
       notion_service.action_log << { message: "Updated Wordle scores for #{today_date}", url: notion_service.construct_notion_url(page_id) }
     else
       Rails.logger.error "No Wordle game found for date #{today_date}"
       notion_service.action_log << { message: "No Wordle game found for date #{today_date}", url: nil }
+      recording.update(status: 'failed')
     end
+
+    recording
   end
 
   def process_restaurant_transcription(openai_service, notion_service, note)
     info = openai_service.extract_restaurant_info(message: note)
     Rails.logger.debug "Extracted restaurant info: #{info}"
-  
+
     restaurant_name = info['restaurant_name']
     recommender_name = info['recommender_name'] || 'Mark'
-  
-    page_id, _ = notion_service.find_or_create_entity(
-      name: restaurant_name,
-      database_key: :restaurants,
-      allow_creation: true
-    )
-  
-    if page_id.nil?
-      Rails.logger.error "Failed to find or create restaurant: #{restaurant_name}"
-      return
-    end
-  
-    recommender_page_id, _ = notion_service.find_or_create_entity(
-      name: recommender_name,
-      database_key: :people,
-      allow_creation: true
-    )
-  
-    page = notion_service.client.page(page_id: page_id)
-    existing_recommenders = notion_service.get_property_value(page: page, property_name: 'Recommenders') || []
-  
-    recommenders = existing_recommenders + [recommender_page_id]
-    recommenders.uniq!
-  
-    properties = notion_service.construct_properties(
-      {
-        'Recommenders' => { type: 'relation', value: recommenders }
-      }
-    )
-  
-    notion_service.update_page(page_id, properties: properties)
-  
+
     recording = Recording.create(
       body: note,
       summary: "Restaurant recommendation: #{restaurant_name}",
       recording_type: 'restaurant',
       status: 'complete'
     )
-  
+
+    page_id, _ = notion_service.find_or_create_entity(
+      name: restaurant_name,
+      database_key: :restaurants,
+      allow_creation: true
+    )
+
+    if page_id.nil?
+      Rails.logger.error "Failed to find or create restaurant: #{restaurant_name}"
+      recording.update(status: 'failed')
+      return recording
+    end
+
+    recommender_page_id, _ = notion_service.find_or_create_entity(
+      name: recommender_name,
+      database_key: :people,
+      allow_creation: true
+    )
+
+    page = notion_service.client.page(page_id: page_id)
+    existing_recommenders = notion_service.get_property_value(page: page, property_name: 'Recommenders') || []
+
+    recommenders = existing_recommenders + [recommender_page_id]
+    recommenders.uniq!
+
+    properties = notion_service.construct_properties(
+      {
+        'Recommenders' => { type: 'relation', value: recommenders }
+      }
+    )
+
+    notion_service.update_page(page_id, properties: properties)
+
     Activity.create(
       recording_id: recording.id,
       page_id: page_id,
       page_url: notion_service.construct_notion_url(page_id),
       action: 'updated',
       database_id: NotionService::DATABASES[:restaurants],
-      database_name: 'restaurants',
+      database_name: 'restaurant',
       status: 'completed'
     )
-  
+
     notion_service.action_log << { message: "Processed restaurant recommendation for '#{restaurant_name}'", url: notion_service.construct_notion_url(page_id) }
+
+    recording
   end
 
   def process_idea_transcription(openai_service, notion_service, note)
     idea = openai_service.extract_idea_title_and_body(message: note)
     Rails.logger.debug "Extracted idea: #{idea}"
-  
+
     title = idea['title']
     body = idea['body']
-  
+
+    recording = Recording.create(
+      body: note,
+      summary: title,
+      recording_type: 'idea',
+      status: 'complete'
+    )
+
     properties_hash = {
       'Name' => { type: 'title', value: title }
     }
@@ -558,7 +608,7 @@ class MainController < ApplicationController
         }
       }
     ]
-  
+
     payload = {
       parent: { database_id: NotionService::DATABASES[:ideas] },
       properties: properties,
@@ -569,24 +619,19 @@ class MainController < ApplicationController
     Rails.logger.debug "Response: #{response}"
     page_id = response['id']
     Rails.logger.debug "Page ID: #{page_id}"
-  
-    recording = Recording.create(
-      body: note,
-      summary: title,
-      recording_type: 'idea',
-      status: 'complete'
-    )
-  
+
     Activity.create(
       recording_id: recording.id,
       page_id: page_id,
       page_url: notion_service.construct_notion_url(page_id),
       action: 'created',
       database_id: NotionService::DATABASES[:ideas],
-      database_name: 'ideas',
+      database_name: 'idea',
       status: 'completed'
     )
-  
+
     notion_service.action_log << { message: "Added new idea '#{title}'", url: notion_service.construct_notion_url(page_id) }
-  end  
+
+    recording
+  end
 end

@@ -1,4 +1,3 @@
-<!-- app/views/main_templates/home.html.erb -->
 <!DOCTYPE html>
 <html>
   <head>
@@ -6,7 +5,13 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
-    
+    <!-- Include Bootstrap CSS (optional) -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-kOQoZwnWGA6Z1mw/6Oa8QoTmJ7Iz1nYlTk0SlD6eAR7AsH6lKiFhiop9B4hJxw4l"
+      crossorigin="anonymous"
+    />
   </head>
 
   <body>
@@ -20,7 +25,7 @@
       <button id="action-button" class="grant">Grant Microphone Access</button>
 
       <!-- Hardcore Mode Checkbox -->
-      <div class="form-check">
+      <div class="form-check mt-3">
         <input
           type="checkbox"
           class="form-check-input"
@@ -33,7 +38,7 @@
       </div>
 
       <!-- Transcription Section -->
-      <div id="transcription-section">
+      <div id="transcription-section" style="display: none; margin-top: 20px;">
         <label for="transcription">Transcription:</label>
         <textarea
           id="transcription"
@@ -47,9 +52,9 @@
       </div>
 
       <!-- Events Section -->
-      <div class="log-section" id="events-section">
+      <div class="log-section mt-4" id="events-section">
         <h3>Events</h3>
-        <table>
+        <table class="table">
           <thead>
             <tr>
               <th>Timestamp</th>
@@ -73,27 +78,33 @@
         </table>
       </div>
 
-      <!-- Action Log Section -->
-      <div class="log-section" id="action-log-section">
-        <h3>Action Log</h3>
-        <table>
+      <!-- Recent Activities Section -->
+      <div class="log-section mt-4" id="recent-activities-section">
+        <h3>Recent Activities</h3>
+        <table class="table">
           <thead>
             <tr>
               <th>Timestamp</th>
+              <th>Recording</th>
               <th>Action</th>
+              <th>Type</th>
+              <th>URL</th>
             </tr>
           </thead>
-          <tbody id="action-log-table-body">
-            <% if @action_log.present? %>
-              <% @action_log.each do |action| %>
+          <tbody>
+            <% if @activities.present? %>
+              <% @activities.each do |activity| %>
                 <tr>
-                  <td><%= action[:timestamp] %></td>
-                  <td><%= action[:message] %></td>
+                  <td><%= activity.created_at.strftime("%Y-%m-%d %H:%M:%S") %></td>
+                  <td><%= activity.recording.body %>
+                  <td><%= activity.action.capitalize %></td>
+                  <td><%= activity.database_name.capitalize %></td>
+                  <td><a href="<%= activity.page_url %>" target="_blank">Open in Notion</a></td>
                 </tr>
               <% end %>
             <% else %>
               <tr>
-                <td colspan="2">No actions to display.</td>
+                <td colspan="4">No recent activities to display.</td>
               </tr>
             <% end %>
           </tbody>
@@ -122,7 +133,6 @@
       const transcriptionTextBox = document.getElementById('transcription');
       const confirmButton = document.getElementById('confirm-button');
       const eventsTableBody = document.getElementById('events-table-body');
-      const actionLogTableBody = document.getElementById('action-log-table-body');
 
       // MediaRecorder and Stream Variables
       let mediaRecorder;
@@ -180,7 +190,7 @@
         }
       }
 
-      // Function to check and initialize microphone on page load
+      // Function to Initialize App
       async function initializeApp() {
         const permissionState = await checkMicrophonePermission();
 
@@ -198,6 +208,9 @@
           actionButton.disabled = true;
           addEvent('Microphone access denied.');
         }
+
+        // Update transcription section visibility based on hardcore mode
+        updateTranscriptionSectionVisibility();
       }
 
       // Listen for changes in microphone permission
@@ -223,7 +236,6 @@
       window.addEventListener('load', () => {
         initializeApp();
         appendServerEvents();
-        appendServerActionLogs();
         listenForPermissionChanges();
       });
 
@@ -278,9 +290,9 @@
             if (hardcoreModeCheckbox.checked) {
               // Hardcore Mode: Immediately process
               statusMessage.textContent = 'Audio transcribed and processed successfully.';
-              addActionLog('Audio transcribed and processed in hardcore mode.');
-              // Optionally, update Action Log with server-side logs
-              appendServerActionLogs();
+              addEvent('Audio transcribed and processed in hardcore mode.');
+              // Reload the page to fetch new activities
+              location.reload();
             } else {
               // Non-Hardcore Mode: Display transcription for confirmation
               transcriptionTextBox.value = data.transcription;
@@ -301,44 +313,33 @@
       }
 
       // Confirm Button Handler
-      confirmButton.addEventListener('click', async () => {
+      confirmButton.addEventListener('click', () => {
         const transcription = transcriptionTextBox.value.trim();
         if (!transcription) {
           alert('Transcription is empty. Please try recording again.');
           return;
         }
 
-        const formData = new FormData();
-        formData.append('transcription', transcription);
-        formData.append('hardcore_mode', hardcoreModeCheckbox.checked ? '1' : '0');
+        // Create a form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/confirm';
 
-        try {
-          const response = await fetch('/confirm_transcription', { // Ensure this matches your routes
-            method: 'POST',
-            headers: {
-              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            },
-            body: formData
-          });
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'authenticity_token';
+        csrfInput.value = csrfToken;
+        form.appendChild(csrfInput);
 
-          if (response.ok) {
-            const data = await response.json();
-            statusMessage.textContent = 'Transcription confirmed and processed successfully.';
-            transcriptionSection.style.display = 'none';
-            transcriptionTextBox.value = '';
-            addActionLog('Transcription confirmed and processed.');
-            // Optionally, update Action Log with server-side logs
-            appendServerActionLogs();
-          } else {
-            console.error('Server Error:', response.statusText);
-            statusMessage.textContent = 'Error confirming transcription. Please try again.';
-            addEvent(`Error confirming transcription: ${response.statusText}`);
-          }
-        } catch (error) {
-          console.error('Fetch Error:', error);
-          statusMessage.textContent = 'Error confirming transcription. Please try again.';
-          addEvent(`Error confirming transcription: ${error.message}`);
-        }
+        const transcriptionInput = document.createElement('input');
+        transcriptionInput.type = 'hidden';
+        transcriptionInput.name = 'transcription';
+        transcriptionInput.value = transcription;
+        form.appendChild(transcriptionInput);
+
+        document.body.appendChild(form);
+        form.submit();
       });
 
       // Function to Add Entries to Events
@@ -356,49 +357,10 @@
         eventsTableBody.prepend(tr); // Add to the top
       }
 
-      // Function to Add Entries to Action Log
-      function addActionLog(message) {
-        const tr = document.createElement('tr');
-        const timestampTd = document.createElement('td');
-        const messageTd = document.createElement('td');
-        const timestamp = new Date().toLocaleTimeString();
-        timestampTd.textContent = timestamp;
-        messageTd.textContent = message;
-
-        tr.appendChild(timestampTd);
-        tr.appendChild(messageTd);
-        actionLogTableBody.prepend(tr); // Add to the top
-      }
-
-      // Function to Append Server-Side Action Logs
-      async function appendServerActionLogs() {
-        try {
-          const response = await fetch('/fetch_action_logs', { // Ensure this route exists
-            method: 'GET',
-            headers: {
-              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            }
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            if (data.action_logs && data.action_logs.length > 0) {
-              data.action_logs.forEach(action => {
-                addActionLog(action);
-              });
-            }
-          } else {
-            console.error('Failed to fetch server-side action logs.');
-          }
-        } catch (error) {
-          console.error('Error fetching server-side action logs:', error);
-        }
-      }
-
       // Function to Append Server-Side Events
       async function appendServerEvents() {
         try {
-          const response = await fetch('/fetch_events', { // Ensure this route exists
+          const response = await fetch('/fetch_events', {
             method: 'GET',
             headers: {
               'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
@@ -419,6 +381,21 @@
           console.error('Error fetching server-side events:', error);
         }
       }
+
+      // Function to update the visibility of the transcription section based on hardcore mode checkbox
+      function updateTranscriptionSectionVisibility() {
+        if (hardcoreModeCheckbox.checked) {
+          // Hardcore mode is enabled, hide transcription section
+          transcriptionSection.style.display = 'none';
+        } else {
+          // Hardcore mode is disabled, show transcription section
+          transcriptionSection.style.display = 'block';
+        }
+      }
+
+      // Add event listener to hardcore mode checkbox
+      hardcoreModeCheckbox.addEventListener('change', updateTranscriptionSectionVisibility);
+
     </script>
 
   </body>

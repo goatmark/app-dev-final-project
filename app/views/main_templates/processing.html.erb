@@ -1,118 +1,29 @@
-<!-- app/views/main_templates/processing.html.erb -->
-<br>
-<a href="/" class="btn btn-secondary mb-4">Back to Home</a>
+<div class="container">
+  <h1>Dictation App: Confirmation</h1>
+  <hr>
 
-<h1>Dictation App: Confirmation</h1>
-<hr>
-
-<% case @result %>
-<% when 'note' %>
-  <div><b>Note title: </b><%= @title %></div>
-  <div><b>Note body: </b><%= @body %></div>
-  <div><b>Note date: </b><%= @todays_date %></div>
-<% when 'task' %>
-  <div><b>Task: </b><%= @task %></div>
-  <div><b>Deadline: </b><%= @deadline %></div>
-  <div><b>Action Date: </b><%= @action_date %></div>
-<% when 'ingredient' %>
-  <h2>Ingredients to Add:</h2>
-  <ul>
-    <% @ingredients.each do |ingredient| %>
-      <li>
-        <b>Name:</b> <%= ingredient['name'] %>, 
-        <b>Quantity:</b> <%= ingredient['quantity'] %>
-        <% if ingredient['page_id'] && ingredient['match_type'] %>
-          (Page ID: <%= ingredient['page_id'] %>, Match Type: <%= ingredient['match_type'] %>)
-        <% else %>
-          (No matching page found)
-        <% end %>
-      </li>
-    <% end %>
-  </ul>
-<% when 'recipe' %>
-  <h2>Recipes to Plan:</h2>
-  <ul>
-  <% @recipes.each do |recipe| %>
-    <li>
-      <%= recipe %>
-      <% if @related_entities %>
-        <% related = @related_entities.find { |e| e['name'] == recipe } %>
-        <% if related && related['page_id'] && related['match_type'] %>
-          (Page ID: <%= related['page_id'] %>, Match Type: <%= related['match_type'] %>)
-        <% else %>
-          (No matching page found)
-        <% end %>
-      <% else %>
-        (No related entities available)
-      <% end %>
-    </li>
-  <% end %>
-</ul>
-<% else %>
-  <div>Unknown result type.</div>
-<% end %>
-
-<!-- Hidden Fields Form -->
-<form action="/confirm" method="post">
-  <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
-  
-  <% case @result %>
-  <% when 'ingredient' %>
-    <%= hidden_field_tag :ingredients, @ingredients.to_json %>
-  <% when 'recipe' %>
-    <%= hidden_field_tag :recipes, @recipes.to_json %>
-  <% when 'note' %>
-    <%= hidden_field_tag :title, @title %>
-    <%= hidden_field_tag :body, @body %>
-    <%= hidden_field_tag :todays_date, @todays_date %>
-    <%= hidden_field_tag :related_entities, @related_entities.to_json if @related_entities.present? %>
-  <% when 'task' %>
-    <%= hidden_field_tag :task, @task %>
-    <%= hidden_field_tag :deadline, @deadline %>
-    <%= hidden_field_tag :action_date, @action_date %>
-    <%= hidden_field_tag :related_entities, @related_entities.to_json if @related_entities.present? %>
-  <% end %>
-  
-  <%= hidden_field_tag :result, @result %>
-  <button>Confirm</button>
-</form>
-
-<!-- Related Entities Section -->
-<% if ['ingredient', 'recipe'].include?(@result) %>
-  <h3>Related Entities:</h3>
-  <% if (@result == 'ingredient' && @ingredients&.any? { |ing| ing['page_id'].present? }) || 
-        (@result == 'recipe' && @related_entities&.any? { |e| e['page_id'].present? }) %>
-    <ul>
-      <% if @result == 'ingredient' %>
-        <% @ingredients.each do |ingredient| %>
+  <% if @recording.present? %>
+    <div><b>Recording Summary:</b> <%= @recording.summary %></div>
+    <div><b>Recording Type:</b> <%= @recording.recording_type.capitalize %></div>
+    <div><b>Status:</b> <%= @recording.status.capitalize %></div>
+    <div><b>Body:</b> <%= @recording.body %></div>
+    <hr>
+    <% if @activities.present? %>
+      <h3>Associated Activities:</h3>
+      <ul>
+        <% @activities.each do |activity| %>
           <li>
-            <b><%= ingredient['name'] %>:</b>
+            <b>Action:</b> <%= activity.action.capitalize %>,
+            <b>Type:</b> <%= activity.database_name.capitalize %>,
+            <b>Status:</b> <%= activity.status.capitalize %>,
+            <b>URL:</b> <a href="<%= activity.page_url %>" target="_blank">Open in Notion</a>
           </li>
         <% end %>
-      <% end %>
-    </ul>
+      </ul>
+    <% else %>
+      <p>No activities associated with this recording.</p>
+    <% end %>
   <% else %>
-    <p>No related entities available.</p>
+    <p>No recording information available.</p>
   <% end %>
-<% end %>
-
-<h3>Debugging Information</h3>
-<pre>
-Result: <%= @result %>
-<% if @related_entities.present? %>
-Extracted Entities: <%= @related_entities.inspect %>
-<% end %>
-OpenAI API Response:
-Note: <%= @note %>
-Title: <%= @title %>
-Body: <%= @body %>
-Task: <%= @task %>
-Deadline: <%= @deadline %>
-Action Date: <%= @action_date %>
-Skip Confirmation: <%= @skip_confirmation %>
-</pre>
-
-<hr>
-
-<h2>Original Input</h2>
-<p><%= @note %></p>
+</div>
