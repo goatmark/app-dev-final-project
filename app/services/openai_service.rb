@@ -179,7 +179,13 @@ class OpenaiService
       parameters: {
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Context: You are responsible for parsing elements of a dictation. Your job is to extract just the 'note' part of the message given to you, excluding any commands given to the dictation app. In other words, if receiving something that says 'Make a note that I need to...', return 'I need to...' onwards. Return the full note. Do NOT summarize, paraphrase, or copy edit. You may only make minor tweaks to address filler words (ums/likes), misspoken words, or fractured sentences. Do NOT summarize. Do NOT attempt to improve the quality of writing beyond specification." },
+          { role: "system", content: "Context: You are responsible for parsing elements of a dictation. Your job is to extract just the 'note' part of the message given to you, excluding any commands given to the dictation app. In other words, if receiving something that says 'Make a note that I need to...', return 'I need to...' onwards. 
+          
+              Your job is to return the full note. Key instructions:
+              - Do NOT summarize, paraphrase, or copy edit. Your goal is to extract, not to summarize
+              - You may only make minor tweaks to the note body, such as  filler words (ums/likes), misspoken words, or fractured sentences.
+              - Do NOT attempt to improve the quality of writing beyond specification.
+              - Your output should mirror the original input closely, with only minor changes as specified above with no other changes." },
           { role: "user", content: message }
         ],
         temperature: 0.7
