@@ -323,6 +323,30 @@ class MainController < ApplicationController
       status: 'completed'
     )
 
+    # a. Gather all relevant information
+    gathered_info = notion_service.gather_task_related_information(related_entities)
+
+    # b. Generate a plan using OpenAI
+    plan = openai_service.generate_task_plan(task_summary: task, gathered_info: gathered_info)
+
+    # c. Update the task page with the generated plan
+    if plan.present?
+      notion_service.update_task_body(page_id, plan)
+      Rails.logger.debug "Task body updated with the generated plan."
+      notion_service.action_log << { 
+        message: "Task body updated with the generated plan.", 
+        url: notion_service.construct_notion_url(page_id),
+        plan: plan 
+      }
+    else
+      Rails.logger.warn "No plan was generated."
+      notion_service.action_log << { 
+        message: "Failed to generate a plan for the task.", 
+        url: notion_service.construct_notion_url(page_id),
+        plan: nil 
+      }
+    end
+
     recording
   end
 

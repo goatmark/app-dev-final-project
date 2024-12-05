@@ -506,4 +506,51 @@ class OpenaiService
       return {}
     end
   end
+
+  def generate_task_plan(task_summary:, gathered_info:)
+    prompt = construct_plan_prompt(task_summary: task_summary, gathered_info: gathered_info)
+
+    # Log the prompt being sent to OpenAI
+    Rails.logger.info "OpenAI Prompt for Task Plan:\n#{prompt}"
+
+    response = @client.chat(
+      parameters: {
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are an assistant that helps in planning tasks by leveraging all available information from associated entities and related notes. Provide a detailed plan of action to accomplish the task effectively." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 500
+      }
+    )
+
+    plan = response.dig("choices", 0, "message", "content").strip
+
+    # Log the response received from OpenAI
+    Rails.logger.info "OpenAI Response for Task Plan:\n#{plan}"
+
+    return plan
+  end
+
+  private
+
+  # Helper method to construct the prompt for plan generation
+  def construct_plan_prompt(task_summary:, gathered_info:)
+    info_text = gathered_info.map do |key, value|
+      "#{key}:\n#{value}\n"
+    end.join("\n")
+
+    prompt = <<~PROMPT
+      Task Summary:
+      #{task_summary}
+
+      Gathered Information:
+      #{info_text}
+
+      Based on the above information, provide the best possible plan of attack to accomplish the task. The plan should include actionable steps, considerations, and any relevant resources or strategies.
+    PROMPT
+
+    prompt
+  end
 end

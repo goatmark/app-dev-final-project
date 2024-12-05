@@ -149,6 +149,170 @@ class NotionService
     raise
   end
 
+  # Helper method to get the full content of a page
+  def get_page_content(page_id)
+    Rails.logger.debug "Fetching content for page ID: #{page_id}"
+    blocks = []
+    cursor = nil
+    loop do
+      begin
+        response = client.blocks_children_list(
+          block_id: page_id,
+          start_cursor: cursor,
+          page_size: 100
+        )
+        Rails.logger.debug "Fetched #{response['results'].size} blocks."
+        blocks += response['results']
+        cursor = response['next_cursor']
+        Rails.logger.debug "Next cursor: #{cursor}"
+        break unless cursor
+      rescue => e
+        Rails.logger.error "Error fetching blocks for page ID #{page_id}: #{e.message}"
+        raise e
+      end
+    end
+
+    # Extract text from blocks
+    content = blocks.map do |block|
+      extract_text_from_block(block)
+    end.compact.join("\n\n")
+
+    Rails.logger.debug "Extracted content length: #{content.length}"
+    content
+  end
+
+  # New method to gather information related to a task
+  def gather_task_related_information(related_entities)
+    gathered_info = {}
+
+    related_entities.each do |entity|
+      name = entity['name']
+      type = entity['type']
+      database_key = type.pluralize.to_sym
+
+      page = find_page_by_title(database_key, name)
+      if page
+        page_content = get_page_content(page['id'])
+        gathered_info["#{type.capitalize} - #{name}"] = page_content
+      else
+        Rails.logger.warn "No page found for #{type}: #{name}"
+        gathered_info["#{type.capitalize} - #{name}"] = "No information available."
+      end
+    end
+
+    # Fetch related notes
+    notes = fetch_related_notes(related_entities)
+    gathered_info["Related Notes"] = notes.map { |note| "#{note[:title]}\n#{note[:content]}" }.join("\n\n")
+
+    gathered_info
+  end
+
+  # Helper method to extract text from a block
+  def extract_text_from_block(block)
+    case block['type']
+    when 'paragraph'
+      text = block['paragraph']['text'].map { |t| t['plain_text'] }.join
+      Rails.logger.debug "Extracted paragraph: #{text}"
+      text
+    when 'heading_1', 'heading_2', 'heading_3'
+      text = block[block['type']]['text'].map { |t| t['plain_text'] }.join
+      Rails.logger.debug "Extracted heading: #{text}"
+      text
+    when 'bulleted_list_item', 'numbered_list_item'
+      text = "- " + block[block['type']]['text'].map { |t| t['plain_text'] }.join
+      Rails.logger.debug "Extracted list item: #{text}"
+      text
+    when 'toggle'
+      text = block['toggle']['text'].map { |t| t['plain_text'] }.join
+      Rails.logger.debug "Extracted toggle: #{text}"
+      text
+    when 'quote'
+      text = "> " + block['quote']['text'].map { |t| t['plain_text'] }.join
+      Rails.logger.debug "Extracted quote: #{text}"
+      text
+    when 'code'
+      text = "```\n" + block['code']['text'].map { |t| t['plain_text'] }.join + "\n```"
+      Rails.logger.debug "Extracted code block."
+      text
+    else
+      Rails.logger.debug "Skipped unsupported block type: #{block['type']}"
+      nil
+    end
+  rescue => e
+    Rails.logger.error "Error extracting text from block: #{e.message}"
+    nil
+  end
+
+  # Helper method to fetch related notes
+  def fetch_related_notes(related_entities)
+    # Assuming there's a 'Notes' database and each note has relations to people, classes, or companies
+    # Build a filter to find notes related to any of the entities
+    relation_filters = related_entities.map do |entity|
+      {
+        "property": entity['type'].capitalize,
+        "relation": {
+          "contains": find_page_by_title(entity['type'].pluralize.to_sym, entity['name'])&.dig('id')
+        }
+      }
+    end
+
+    # Combine filters with OR
+    filter = {
+      "or": relation_filters
+    }
+
+    notes = []
+    cursor = nil
+    loop do
+      response = client.database_query(
+        database_id: DATABASES[:notes],
+        filter: filter,
+        start_cursor: cursor,
+        page_size: 100
+      )
+      response['results'].each do |page|
+        title = get_property_value(page: page, property_name: 'Meeting') # Adjust based on your title property
+        content = get_page_content(page['id'])
+        notes << { title: title, content: content }
+      end
+      cursor = response['next_cursor']
+      break unless cursor
+    end
+
+    notes
+  end
+
+  # New method to update the body of a task with the generated plan
+  def update_task_body(task_page_id, plan)
+    Rails.logger.debug "Updating task body for page ID: #{task_page_id}"
+
+    properties = {
+      'Body' => {
+        'rich_text' => [
+          {
+            'type' => 'text',
+            'text' => {
+              'content' => plan
+            }
+          }
+        ]
+      }
+    }
+
+    response = update_page(task_page_id, properties: properties)
+
+    if response
+      Rails.logger.debug "Successfully updated task body for page ID #{task_page_id}."
+      @action_log << { message: "Task body updated with the generated plan.", url: construct_notion_url(task_page_id) }
+    else
+      Rails.logger.error "Failed to update task body for page ID #{task_page_id}."
+      @action_log << { message: "Failed to update task body.", url: construct_notion_url(task_page_id) }
+    end
+  rescue => e
+    Rails.logger.error "Error updating task body: #{e.message}"
+    @action_log << { message: "Error updating task body: #{e.message}", url: construct_notion_url(task_page_id) }
+  end
+
   # Modified method to include indirect matching and control over page creation
   def find_or_create_entity(name:, database_key:, allow_creation: true)
     Rails.logger.debug "find_or_create_entity() method"
@@ -229,14 +393,14 @@ class NotionService
     Rails.logger.debug "Title Property Name: #{title_property_name}"
     filter = {
       property: title_property_name,
-      title: { equals: title }
+      title: { contains: title }
     }
     Rails.logger.debug "Filter: #{filter}"
     response = @client.database_query(
       database_id: database_id,
       filter: filter
     )
-
+  
     if response && response['results'] && !response['results'].empty?
       response['results'].first
     else
