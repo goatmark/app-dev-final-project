@@ -277,6 +277,8 @@ class MainController < ApplicationController
       Rails.logger.warn "No person found for people_update transcription. Defaulting to note."
       return process_note_transcription(openai_service, notion_service, note)
     end
+
+    body = openai_service.extract_note_body(message: note, type: "people_update")
     
     person_name = person_entity["name"]
     # Find or create the person page
@@ -304,7 +306,7 @@ class MainController < ApplicationController
             {
               type: 'text',
               text: {
-                'content' => note
+                'content' => body
               }
             }
           ]

@@ -176,7 +176,7 @@ class OpenaiService
     return title
   end
 
-  def extract_note_body(message:)
+  def extract_note_body(message:, type: "note")
     response = @client.chat(
       parameters: {
         model: "gpt-4o-mini",
@@ -187,7 +187,13 @@ class OpenaiService
               - Do NOT summarize, paraphrase, or copy edit. Your goal is to extract, not to summarize
               - You may only make minor tweaks to the note body, such as  filler words (ums/likes), misspoken words, or fractured sentences.
               - Do NOT attempt to improve the quality of writing beyond specification.
-              - Your output should mirror the original input closely, with only minor changes as specified above with no other changes." },
+              - Your output should mirror the original input closely, with only minor changes as specified above with no other changes.
+              If #{type} == 'note', ignore all subsequent instructions. If #{type} == 'people_update' do the following:
+              - Remove references to the person's name
+              - Extract only meaningful content 
+              Example:
+              - 'I just learned that Albert Einstein couldn't put a T-shirt on his own' -> 'Couldn't put a T-shirt on his own'
+              - 'Lorna really liked the brand Le Creuset' -> 'Likes Le Creuset'"},
           { role: "user", content: message }
         ],
         temperature: 0.7
