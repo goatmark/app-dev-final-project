@@ -160,6 +160,8 @@ class MainController < ApplicationController
       recording = process_restaurant_transcription(openai_service, notion_service, transcription)
     when "idea"
       recording = process_idea_transcription(openai_service, notion_service, transcription)
+    when "people_update"
+      recording = process_people_update_transcription(openai_service, notion_service, transcription)  
     else
       Rails.logger.error "Could not classify the transcription."
       recording = Recording.create(
@@ -260,6 +262,68 @@ class MainController < ApplicationController
       status: 'completed'
     )
 
+    recording
+  end
+
+  def process_people_update_transcription(openai_service, notion_service, note)
+    # Extract related entities; we expect at least one person
+    related_entities = openai_service.extract_related_entities(message: note) || []
+    # Just in case multiple entities come back, we focus on the first person match
+    # A "people_update" ideally involves a single known person
+    person_entity = related_entities.find { |e| e["type"] == "person" }
+    
+    # If we cannot find a person entity, fallback to note
+    if person_entity.nil?
+      Rails.logger.warn "No person found for people_update transcription. Defaulting to note."
+      return process_note_transcription(openai_service, notion_service, note)
+    end
+    
+    person_name = person_entity["name"]
+    # Find or create the person page
+    page_id, match_type = notion_service.find_or_create_entity(
+      name: person_name,
+      database_key: :people,
+      allow_creation: true
+    )
+  
+    recording = Recording.create(
+      body: note,
+      summary: "People Update: #{person_name}",
+      recording_type: 'people_update',
+      status: 'complete'
+    )
+  
+    # We will use the raw `note` as the content to append. 
+    # You could refine this by extracting the "update" portion only if you like.
+    children = [
+      {
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'text',
+              text: {
+                'content' => note
+              }
+            }
+          ]
+        }
+      }
+    ]
+  
+    notion_service.append_children_to_page(page_id: page_id, children: children)
+  
+    Activity.create(
+      recording_id: recording.id,
+      page_id: page_id,
+      page_url: notion_service.construct_notion_url(page_id),
+      action: 'updated',
+      database_id: ENV.fetch("PEOPLE_DB_KEY"),
+      database_name: 'people',
+      status: 'completed'
+    )
+  
     recording
   end
 

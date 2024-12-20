@@ -141,7 +141,7 @@ class NotionService
 
   # Method to append children to a page
   def append_children_to_page(page_id:, children:)
-    @client.append_block_children(block_id: page_id, children: children)
+    @client.block_append_children(block_id: page_id, children: children)
     @action_log << "Appended children to page ID '#{page_id}'."
   rescue Notion::Api::Errors::NotionError => e
     @action_log << "Failed to append children: #{e.message}"

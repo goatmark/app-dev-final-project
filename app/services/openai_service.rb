@@ -52,6 +52,7 @@ class OpenaiService
       - task
       - wordle
       - restaurant
+      - people_update
     Each of these classifiers will lead to a set of appropriate events. Key examples:
       - Suggesting items to add to the shopping list should update the 'ingredient' database such that the 'Shopping List' field is true. A message comprising a single ingredient, household item, or foodstuff should also certainly return an 'ingredient'.
       - Suggesting an intention to make or cook something should be treated as a 'recipe'.
@@ -59,6 +60,7 @@ class OpenaiService
       - Recommending or mentioning a restaurant should be classified as 'restaurant'.
       - Suggesting something is a 'task' will proceed to extract its start date and deadline (where applicable).
       - Saying 'I should read more about nihilism' will create an entry in the 'recommendation' DB with 'nihilism' as the title.
+      - A 'people_update' is when the user provides a factual update or new information specifically about a known person. For example, 'David told me that he is going to Bali tomorrow' or 'Goliath really liked Le Creuset ceramics' is a people update.
       - Any ambiguity should default to 'note'.
     Return only the classification, in the singular, with NO other text and without quotes.
     PROMPT
@@ -97,7 +99,7 @@ class OpenaiService
       parameters: {
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Extract only the identified piece of media (book title, article title, etc). Only include the title. Do not include any other text. Do not include author name or any other information (unless the recommendation lacks a specific name or includes something like 'Books by David Wright' or 'Philosophy of Nietzsche' or 'Dr. Oz's Podcast' - in which case, returna helpful description that accurately captures the recommendation)." },
+          { role: "system", content: "Extract only the identified piece of media (book title, article title, etc). Only include the title. Do not include any other text. Do not include author name or any other information (unless the recommendation lacks a specific name or includes something like 'Books by David Wright' or 'Philosophy of Nietzsche' or 'Dr. Oz's Podcast' - in which case, return a helpful description that accurately captures the recommendation)." },
           { role: "user", content: message }
         ],
         temperature: 0.7
