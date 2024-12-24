@@ -231,6 +231,7 @@ class OpenaiService
       prompt = <<~PROMPT
         From the following message, extract all specific names of people, specific classes (courses offered at Booth), or companies mentioned that could be relations in a Notion database.
         Do not include generic terms or groups like "MBA students" or "students".
+        Do not include fictional characters including Gods, Titans, or other characters.
         For each entity, identify its type as one of: "person", "class", or "company".
         Return the results in JSON format as an array of objects with "name" and "type" keys.
         **Do not include any code block markers, triple backticks, or any additional text before or after the JSON.**
