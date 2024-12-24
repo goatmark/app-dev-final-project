@@ -124,3 +124,6 @@ gem 'sassc-rails', '>= 2.1.0'
 
 # Add streamio for audio parsing
 gem 'streamio-ffmpeg'
+
+# Add fuzzy string for partial text matching and improved matching algorithm
+gem 'fuzzy_match'

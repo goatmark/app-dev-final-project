@@ -182,6 +182,7 @@ GEM
     ffi-compiler (1.3.2)
       ffi (>= 1.15.5)
       rake
+    fuzzy_match (2.1.0)
     globalid (1.2.1)
       activesupport (>= 6.1)
     grade_runner (0.0.12)
@@ -503,6 +504,7 @@ DEPENDENCIES
   draft_generators
   draft_matchers
   faker
+  fuzzy_match
   grade_runner
   htmlbeautifier
   http
