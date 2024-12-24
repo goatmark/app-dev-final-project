@@ -60,9 +60,32 @@ class OpenaiService
       - Recommending or mentioning a restaurant should be classified as 'restaurant'.
       - Suggesting something is a 'task' will proceed to extract its start date and deadline (where applicable).
       - Saying 'I should read more about nihilism' will create an entry in the 'recommendation' DB with 'nihilism' as the title.
-      - A 'people_update' is when the user provides a factual update or new information specifically about a known person. For example, 'David told me that he is going to Bali tomorrow' or 'Goliath really liked Le Creuset ceramics' is a people update.
-      - Any ambiguity should default to 'note'.
+      - A 'people_update' is when the user provides a factual update or new information specifically about a single person. 
+          Examples: 
+          - 'David told me that he is going to Bali tomorrow' -> 'people_update' 
+          - 'Goliath really liked Le Creuset ceramics' -> 'people_update'
+          - 'William is allergic to bees' -> 'people_update'
+          - 'Paul told me that he really does not like Picasso' -> 'people_update' (this is still a people update; two people are mentioned - Paul and Picasso - but there is only one subject and Picasso is an object relative to the main subject. This is a factual update about one person)
+          Things that should be classified as 'note' rather than 'people_update':
+          - A note about two people should be referenced as a note, e.g.
+            'I had lunch today with Anna and Bob' -> 'note'
+          - A note referencing one person that is more about a general subject, rather than personal information updates, should be a note:
+            'I had a conversation with Anna. She provided an interesting insight: that the Roomba is actually an analytical device' is a 'note'. This is not factual information about Anna, it is a general note.
+      - Anything that does not neatly meet any of the categories above should default to 'note'.
     Return only the classification, in the singular, with NO other text and without quotes.
+
+    Examples:
+      'Wine' -> 'ingredient'
+      'Tomatoes, parsley, mint, sumac' -> 'ingredient'
+      'I need to add spring onions, lemon, and mint to the shopping list' -> 'ingredient'
+      'Tabbouleh' -> 'recipe'
+      'I want to make fattoush' -> 'recipe'
+      '5-5' -> 'wordle'
+      '3-4 Lorna' -> 'wordle'
+      'The professor recommended I check out the restaurant Next in Chicago' -> 'restaurant'
+      'Remind me tomorrow that I need to take out the trash by Friday' -> 'task'
+      'The professor recommended I check out some of the works of Peter Thiel' -> 'recommendation'
+
     PROMPT
   
     response = @client.chat(
@@ -311,6 +334,8 @@ class OpenaiService
       - Quantities should be integers.
       - Do NOT include any measurement or container units. As an example, never return a "name" of 'Jar of Cumin'; ignore 'jar' and only ever return a name of 'Cumin' in this example.
       - Do not include any code block markers or additional text.
+      - If the message states to remove an item from the shopping list, add a quantity of -1.
+      - Examine the message holistically, as it originates from a dictation and may be unintentionally redundant. E.g. if the message says 'add mint, and parsley and, wait, do I need tomatoes? Yes, that is right - pkay, so parsley, mint, and 4 tomatoes', you will want to add 1 parsley, 1 mint, and 4 tomatoes, per the JSON specifications below.
 
       Key preferences / associations (in all cases unless specified otherwise):
       - Assume 'Onions' refers to 'Yellow Onion'
