@@ -1,3 +1,5 @@
+# app / controllers / recordings_controller.rb
+
 class RecordingsController < ApplicationController
   def index
     matching_recordings = Recording.all

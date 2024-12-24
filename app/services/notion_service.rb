@@ -1,3 +1,5 @@
+# app/services/notion_service.rb
+
 class NotionService
   attr_reader :action_log, :client
 
@@ -384,34 +386,41 @@ class NotionService
   end
 
   # General method to find a page by title
-  def find_page_by_title(database_key, title)
+  def find_page_by_title(database_key, raw_title)
     Rails.logger.debug "Find Page by Title Method"
-    Rails.logger.debug "DB Key: #{database_key}, Title: #{title}"
     database_id = DATABASES[database_key]
-    Rails.logger.debug "DB ID: #{database_id}"
-    title_property_name = TITLE_PROPERTIES[database_key] || 'Name' # Use the correct title property
-    Rails.logger.debug "Title Property Name: #{title_property_name}"
-    filter = {
-      property: title_property_name,
-      title: { contains: title }
-    }
-    Rails.logger.debug "Filter: #{filter}"
-    response = @client.database_query(
-      database_id: database_id,
-      filter: filter
-    )
+    title_property_name = TITLE_PROPERTIES[database_key] || 'Name'
   
-    if response && response['results'] && !response['results'].empty?
-      response['results'].first
-    else
-      Rails.logger.warn "No page found for title '#{title}' in database '#{database_key}'."
-      nil
+    # 1) Try EXACT match on the raw title
+    exact_match_page = query_for_exact_match(database_id, title_property_name, raw_title)
+    return exact_match_page if exact_match_page
+  
+    # 2) Try EXACT match on singular / plural forms
+    singular = raw_title.singularize
+    plural   = raw_title.pluralize
+  
+    [singular, plural].uniq.each do |term|
+      exact_match_page = query_for_exact_match(database_id, title_property_name, term)
+      return exact_match_page if exact_match_page
     end
-  rescue Notion::Api::Errors::NotionError => e
-    @action_log << "Error querying database #{database_key}: #{e.message}"
-    Rails.logger.error "Notion API Error: #{e.message}"
-    nil
+  
+    # 3) If we still have nothing, we do partial match (contains:)
+    partial_matches = query_for_partial_match(database_id, title_property_name, raw_title)
+    return nil if partial_matches.empty?
+  
+    return partial_matches.first if partial_matches.size == 1
+  
+    # 4) If multiple partial matches, pick the best fuzzy match
+    best_page = pick_best_fuzzy_match(partial_matches, raw_title, title_property_name)
+    if best_page
+      Rails.logger.debug "Resolved multiple partial matches; best fuzzy match = #{best_page['id']}"
+      return best_page
+    else
+      Rails.logger.warn "Could not fuzzy-match any page for '#{raw_title}' among multiple partial results."
+      return nil
+    end
   end
+  
 
   # Helper method to get all titles from a database
   def get_all_titles_from_database(database_key)
@@ -467,4 +476,113 @@ class NotionService
       end
     end
   end
+end
+
+private
+
+############################################################
+# Helpers
+############################################################
+
+# Use the Notion filter: title => { equals: <some_string> }
+# Return the single page if exactly one match; otherwise nil.
+def query_for_exact_match(database_id, property_name, title_string)
+  filter = {
+    property: property_name,
+    title: { equals: title_string }
+  }
+  response = @client.database_query(database_id: database_id, filter: filter)
+  results = response['results']
+
+  if results.size == 1
+    page = results.first
+    Rails.logger.debug "Exact match found for '#{title_string}': page #{page['id']}"
+    return page
+  elsif results.size > 1
+    # If multiple exact matches, pick whichever you want, or do fuzzy picking.
+    # For simplicity, let's pick the first.
+    Rails.logger.warn "Multiple exact matches found for '#{title_string}'; returning first."
+    return results.first
+  end
+
+  nil
+end
+
+# Use the Notion filter: title => { contains: <some_string> }
+# Return the array of matched pages (could be empty or multiple)
+def query_for_partial_match(database_id, property_name, title_string)
+  filter = {
+    property: property_name,
+    title: { contains: title_string }
+  }
+  response = @client.database_query(database_id: database_id, filter: filter)
+  response['results'] || []
+end
+
+# Among multiple pages, find the best match to `search_term` via Levenshtein distance
+def pick_best_fuzzy_match(pages, search_term, property_name)
+  pages_with_distance = pages.map do |page|
+    page_title = get_property_value(page: page, property_name: property_name)
+    distance   = levenshtein_distance(page_title.downcase, search_term.downcase)
+    { page: page, title: page_title, distance: distance }
+  end
+
+  # Sort by ascending distance (lower = closer match)
+  sorted = pages_with_distance.sort_by { |obj| obj[:distance] }
+  best   = sorted.first
+  best[:page]  # Return the actual page object
+end
+
+# Plain Ruby Levenshtein distance — no gems required
+def levenshtein_distance(str1, str2)
+  m = str1.length
+  n = str2.length
+  d = Array.new(m+1) { Array.new(n+1) }
+
+  (0..m).each { |i| d[i][0] = i }
+  (0..n).each { |j| d[0][j] = j }
+
+  (1..m).each do |i|
+    (1..n).each do |j|
+      cost = (str1[i-1] == str2[j-1]) ? 0 : 1
+      d[i][j] = [
+        d[i-1][j] + 1,      # deletion
+        d[i][j-1] + 1,      # insertion
+        d[i-1][j-1] + cost  # substitution
+      ].min
+    end
+  end
+
+  d[m][n]
+end
+
+def query_for_exact_match(database_id, property_name, title_string)
+  filter = {
+    property: property_name,
+    title: { equals: title_string }
+  }
+  response = @client.database_query(database_id: database_id, filter: filter)
+  results = response['results']
+
+  if results.size == 1
+    page = results.first
+    Rails.logger.debug "Exact match found for '#{title_string}': page #{page['id']}"
+    return page
+  elsif results.size > 1
+    Rails.logger.warn "Multiple exact matches found for '#{title_string}'; returning first."
+    return results.first
+  end
+
+  nil
+end
+
+# Use the Notion filter: title => { contains: <some_string> }
+# Return the array of matched pages (could be empty or multiple)
+def query_for_partial_match(database_id, property_name, title_string)
+  filter = {
+    property: property_name,
+    title: { contains: title_string }
+  }
+  response = @client.database_query(database_id: database_id, filter: filter)
+  response['results'] || []
 end

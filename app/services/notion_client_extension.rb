@@ -1,6 +1,5 @@
 # app/services/notion_client_extension.rb
 
-
 module NotionClientExtension
   # Define a method to fetch children blocks
   def blocks_children_list(block_id:, start_cursor: nil, page_size: 100)
